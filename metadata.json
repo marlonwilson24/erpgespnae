@@ -1,0 +1,6 @@
+{
+  "name": "PNAE Gestão - Alimentação Escolar",
+  "description": "Sistema completo de gestão do Programa Nacional de Alimentação Escolar (Lei nº 11.947/2009) com controle de cardápios, chamadas públicas de agricultura familiar, entregas, estoque e prestação de contas CAE.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
