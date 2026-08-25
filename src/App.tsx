@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import { PNAEProvider, usePNAE } from './context/PNAEContext';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
@@ -40,7 +41,21 @@ import { CaeOuvidoriaSocial } from './components/cae/CaeOuvidoriaSocial';
 import { NotificationToastContainer } from './components/common/NotificationToastContainer';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, currentRole, activeTab } = usePNAE();
+  const { isAuthenticated, authChecking, currentRole, activeTab } = usePNAE();
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-emerald-700 text-white shadow-md font-bold text-2xl flex items-center justify-center">
+          PN
+        </div>
+        <div className="flex items-center gap-2 text-sm text-stone-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Verificando sessão...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <AuthView />;

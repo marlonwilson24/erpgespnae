@@ -2,39 +2,75 @@ import React, { useState } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
 import { mockUsers } from '../../data/mockData';
 import { UserRole } from '../../types';
-import { 
-  Shield, 
-  Apple, 
-  School, 
-  Tractor, 
-  Scale, 
-  Lock, 
-  Mail, 
-  ArrowRight, 
+import { enviarLinkRecuperacao, traduzirErroAuth } from '../../lib/auth';
+import {
+  Shield,
+  Apple,
+  School,
+  Tractor,
+  Scale,
+  Lock,
+  Mail,
+  ArrowRight,
   CheckCircle2,
-  HelpCircle,
-  Building2
+  AlertCircle,
+  Building2,
+  Eye,
+  EyeOff,
+  Loader2,
+  FlaskConical,
 } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
   const { login, switchRole } = usePNAE();
-  const [email, setEmail] = useState('gestor.pnae@santaclara.rs.gov.br');
-  const [password, setPassword] = useState('••••••••');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [carregando, setCarregando] = useState(false);
   const [error, setError] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCarregando, setForgotCarregando] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [showDemoAccess, setShowDemoAccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const success = login(email);
-    if (!success) {
-      setError('E-mail não localizado no cadastro municipal. Selecione um perfil demonstrativo abaixo.');
+    setCarregando(true);
+
+    try {
+      const resultado = await login(email, senha);
+      if (!resultado.success) {
+        setError(resultado.error || traduzirErroAuth(resultado.error || 'Falha na autenticação.'));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro inesperado ao autenticar.');
+    } finally {
+      setCarregando(false);
     }
   };
 
-  const handleQuickLogin = (role: UserRole) => {
-    switchRole(role);
+  const handleRecuperarSenha = async () => {
+    setForgotError('');
+    if (!forgotEmail.trim()) {
+      setForgotError('Informe o e-mail cadastrado.');
+      return;
+    }
+    setForgotCarregando(true);
+    try {
+      const resultado = await enviarLinkRecuperacao(forgotEmail.trim());
+      if (resultado.success) {
+        setForgotSuccess(true);
+      } else {
+        setForgotError(resultado.error || 'Não foi possível enviar o link de recuperação.');
+      }
+    } catch {
+      setForgotError('Erro inesperado ao enviar o link de recuperação.');
+    } finally {
+      setForgotCarregando(false);
+    }
   };
 
   return (
@@ -70,6 +106,7 @@ export const AuthView: React.FC = () => {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
+                  autoComplete="email"
                   placeholder="seu.email@santaclara.rs.gov.br"
                   className="block w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-sm placeholder-stone-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition"
                 />
@@ -83,7 +120,12 @@ export const AuthView: React.FC = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setShowForgotModal(true)}
+                  onClick={() => {
+                    setShowForgotModal(true);
+                    setForgotEmail(email);
+                    setForgotSuccess(false);
+                    setForgotError('');
+                  }}
                   className="text-xs text-emerald-700 hover:text-emerald-800 font-medium"
                 >
                   Esqueceu a senha?
@@ -94,27 +136,49 @@ export const AuthView: React.FC = () => {
                   <Lock className="w-4 h-4" />
                 </div>
                 <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  type={mostrarSenha ? 'text' : 'password'}
+                  value={senha}
+                  onChange={e => setSenha(e.target.value)}
                   required
-                  className="block w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-sm placeholder-stone-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className="block w-full pl-9 pr-10 py-2 border border-stone-300 rounded-xl text-sm placeholder-stone-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition"
                 />
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha(prev => !prev)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400 hover:text-stone-600 transition"
+                  aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
+                  tabIndex={-1}
+                >
+                  {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
-                {error}
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
             <button
               type="submit"
-              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-xs text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 transition"
+              disabled={carregando}
+              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-xl shadow-xs text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>Acessar Painel</span>
-              <ArrowRight className="w-4 h-4" />
+              {carregando ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Autenticando via Supabase...</span>
+                </>
+              ) : (
+                <>
+                  <span>Acessar Painel</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
@@ -125,46 +189,57 @@ export const AuthView: React.FC = () => {
                 <div className="w-full border-t border-stone-200" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="px-2 bg-white text-stone-500 font-medium">
-                  Ou acesse rapidamente por Perfil
-                </span>
+                <span className="px-2 bg-white text-stone-500 font-medium">ou</span>
               </div>
             </div>
 
-            {/* Quick Login Tiles */}
-            <div className="mt-4 grid grid-cols-1 gap-2">
-              {mockUsers.map(user => {
-                const getRoleIcon = (role: UserRole) => {
-                  switch (role) {
-                    case 'ADMIN': return <Shield className="w-4 h-4 text-emerald-700" />;
-                    case 'NUTRICIONISTA': return <Apple className="w-4 h-4 text-teal-700" />;
-                    case 'ESCOLA': return <School className="w-4 h-4 text-blue-700" />;
-                    case 'FORNECEDOR': return <Tractor className="w-4 h-4 text-amber-700" />;
-                    case 'CAE': return <Scale className="w-4 h-4 text-indigo-700" />;
-                  }
-                };
+            {/* Acesso Demonstração */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowDemoAccess(prev => !prev)}
+                className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold text-stone-500 hover:text-stone-700 transition"
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                <span>{showDemoAccess ? 'Ocultar' : 'Acesso'} Demonstração (sem autenticação)</span>
+              </button>
 
-                return (
-                  <button
-                    key={user.id}
-                    onClick={() => handleQuickLogin(user.role)}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-white transition">
-                        {getRoleIcon(user.role)}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-stone-900">{user.name}</p>
-                        <p className="text-[11px] text-stone-500">{user.cargo || user.role}</p>
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-semibold text-emerald-700 group-hover:translate-x-0.5 transition-transform">
-                      Entrar →
-                    </span>
-                  </button>
-                );
-              })}
+              {showDemoAccess && (
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  {mockUsers.map(user => {
+                    const getRoleIcon = (role: UserRole) => {
+                      switch (role) {
+                        case 'ADMIN': return <Shield className="w-4 h-4 text-emerald-700" />;
+                        case 'NUTRICIONISTA': return <Apple className="w-4 h-4 text-teal-700" />;
+                        case 'ESCOLA': return <School className="w-4 h-4 text-blue-700" />;
+                        case 'FORNECEDOR': return <Tractor className="w-4 h-4 text-amber-700" />;
+                        case 'CAE': return <Scale className="w-4 h-4 text-indigo-700" />;
+                      }
+                    };
+
+                    return (
+                      <button
+                        key={user.id}
+                        onClick={() => switchRole(user.role)}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-white transition">
+                            {getRoleIcon(user.role)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-stone-900">{user.name}</p>
+                            <p className="text-[11px] text-stone-500">{user.cargo || user.role}</p>
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-semibold text-emerald-700 group-hover:translate-x-0.5 transition-transform">
+                          Entrar →
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -195,14 +270,29 @@ export const AuthView: React.FC = () => {
                 <input
                   type="email"
                   placeholder="seu.email@santaclara.rs.gov.br"
-                  defaultValue={email}
+                  value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-stone-300 rounded-xl text-xs focus:ring-2 focus:ring-emerald-600 focus:outline-hidden"
                 />
+                {forgotError && (
+                  <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{forgotError}</span>
+                  </div>
+                )}
                 <button
-                  onClick={() => setForgotSuccess(true)}
-                  className="w-full py-2 bg-emerald-700 text-white rounded-xl text-xs font-semibold hover:bg-emerald-800 transition"
+                  onClick={handleRecuperarSenha}
+                  disabled={forgotCarregando}
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-700 text-white rounded-xl text-xs font-semibold hover:bg-emerald-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Enviar Link de Recuperação
+                  {forgotCarregando ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <span>Enviar Link de Recuperação</span>
+                  )}
                 </button>
               </div>
             )}
@@ -212,6 +302,7 @@ export const AuthView: React.FC = () => {
                 onClick={() => {
                   setShowForgotModal(false);
                   setForgotSuccess(false);
+                  setForgotError('');
                 }}
                 className="text-xs text-stone-500 hover:text-stone-800 font-medium"
               >

@@ -45,6 +45,12 @@ import {
   mockApontamentosCAE,
 } from '../data/mockData';
 import { soundManager } from '../lib/notificationSound';
+import { supabase } from '../lib/supabase';
+import {
+  entrarComSenha,
+  carregarPerfil,
+  encerrarSessao,
+} from '../lib/auth';
 import confetti from 'canvas-confetti';
 
 interface ConfirmarEntregaInput {
@@ -77,6 +83,7 @@ interface PNAEContextType {
   currentUser: UserProfile | null;
   currentRole: UserRole;
   isAuthenticated: boolean;
+  authChecking: boolean;
   municipio: Municipio;
   escolas: Escola[];
   alimentos: Alimento[];
@@ -99,8 +106,8 @@ interface PNAEContextType {
   somHabilitado: boolean;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  login: (email: string, role?: UserRole) => boolean;
-  logout: () => void;
+  login: (email: string, senha: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
   addCardapio: (cardapio: Omit<Cardapio, 'id' | 'criadoEm'>) => void;
   updateCardapioStatus: (id: string, status: Cardapio['status']) => void;
@@ -138,13 +145,50 @@ const PNAEContext = createContext<PNAEContextType | undefined>(undefined);
 const STORAGE_KEY_PREFIX = 'pnae_erp_v2_';
 
 export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'currentUser');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return mockUsers[0]; // Admin por padrão
-  });
+  // Autenticação real via Supabase: a sessão é a fonte da verdade.
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
+
+  // Restaura sessão existente e escuta mudanças de autenticação
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const sessionUser = data.session?.user;
+        if (sessionUser) {
+          const perfil = await carregarPerfil(sessionUser.id, sessionUser.email ?? '');
+          if (mounted && perfil) setCurrentUser(perfil);
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (mounted) setAuthChecking(false);
+      }
+    })();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setAuthChecking(false);
+        return;
+      }
+
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        const perfil = await carregarPerfil(session.user.id, session.user.email ?? '');
+        if (mounted && perfil) setCurrentUser(perfil);
+        setAuthChecking(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -237,12 +281,6 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [somHabilitado, setSomHabilitado] = useState<boolean>(() => !soundManager.getIsMuted());
 
   // Salvar no LocalStorage sempre que houver modificações
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(STORAGE_KEY_PREFIX + 'currentUser', JSON.stringify(currentUser));
-    }
-  }, [currentUser]);
-
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'cardapios', JSON.stringify(cardapios));
   }, [cardapios]);
@@ -570,35 +608,43 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [autorizacoesFornecimento, addAlerta, addAuditoriaLog]);
 
-  const login = (email: string, role?: UserRole): boolean => {
-    const foundUser = mockUsers.find(
-      u => u.email.toLowerCase() === email.toLowerCase() || (role && u.role === role)
-    );
-    if (foundUser) {
-      setCurrentUser(foundUser);
-      setActiveTab('dashboard');
-      addAuditoriaLog('Login no Sistema', 'Autenticação', `Usuário ${foundUser.name} realizou login com perfil ${foundUser.role}`);
-      
-      // Boas vindas com notificação suave
-      addAlerta({
-        tipo: 'info',
-        categoria: 'sistema',
-        prioridade: 'baixa',
-        titulo: `Bem-vindo(a), ${foundUser.name}`,
-        mensagem: `Sessão iniciada como ${foundUser.cargo || foundUser.role}. Sistema sincronizado com dados do PNAE ${municipio.nome}-${municipio.uf}.`,
-        showToast: true,
-      });
-
-      return true;
+  const login = async (email: string, senha: string): Promise<{ success: boolean; error?: string }> => {
+    const resultado = await entrarComSenha(email.trim(), senha);
+    if (!resultado.success) {
+      addAuditoriaLog('Tentativa de Login Falha', 'Autenticação', `Falha de autenticação Supabase para ${email}: ${resultado.error}`);
+      return resultado;
     }
-    return false;
+
+    const { data } = await supabase.auth.getSession();
+    const sessionUser = data.session?.user;
+    const perfil = sessionUser
+      ? await carregarPerfil(sessionUser.id, sessionUser.email ?? email)
+      : null;
+
+    setCurrentUser(perfil);
+    setActiveTab('dashboard');
+    addAuditoriaLog('Login no Sistema', 'Autenticação', `Usuário ${perfil?.name || email} autenticado via Supabase Auth com perfil ${perfil?.role}`);
+
+    // Boas vindas com notificação suave
+    addAlerta({
+      tipo: 'info',
+      categoria: 'sistema',
+      prioridade: 'baixa',
+      titulo: `Bem-vindo(a), ${perfil?.name || email}`,
+      mensagem: `Sessão iniciada como ${perfil?.cargo || perfil?.role}. Sistema sincronizado com dados do PNAE ${municipio.nome}-${municipio.uf}.`,
+      showToast: true,
+    });
+
+    return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
     if (currentUser) {
       addAuditoriaLog('Logout', 'Autenticação', `Usuário ${currentUser.name} encerrou a sessão.`);
     }
     setCurrentUser(null);
+    localStorage.removeItem(STORAGE_KEY_PREFIX + 'currentUser');
+    await encerrarSessao();
   };
 
   const switchRole = (role: UserRole) => {
@@ -1128,6 +1174,7 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         currentRole: currentUser?.role || 'ADMIN',
         isAuthenticated: !!currentUser,
+        authChecking,
         municipio,
         escolas,
         alimentos,
