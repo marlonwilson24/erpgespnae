@@ -1,37 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
-import { RoleBadge } from './RoleBadge';
-import { UserRole } from '../../types';
 import { NotificationCenter } from './NotificationCenter';
-import { 
-  Bell, 
-  RotateCcw, 
-  LogOut, 
-  ChevronDown, 
-  Building2, 
-  Layers,
-  Volume2,
-  VolumeX,
-  Settings,
-} from 'lucide-react';
+import { Bell, Building2 } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { 
-    currentUser, 
-    currentRole, 
-    municipio, 
-    alertas, 
-    markAlertaLido, 
-    switchRole, 
-    logout, 
-    resetToMockData,
-    setActiveTab,
+  const {
+    municipio,
+    alertas,
+    markAlertaLido,
   } = usePNAE();
 
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showAlertsMenu, setShowAlertsMenu] = useState(false);
   const alertsMenuRef = useRef<HTMLDivElement>(null);
-  const roleMenuRef = useRef<HTMLDivElement>(null);
 
   const unreadAlerts = alertas.filter(a => !a.lido);
 
@@ -41,27 +21,16 @@ export const Header: React.FC = () => {
       if (alertsMenuRef.current && !alertsMenuRef.current.contains(event.target as Node)) {
         setShowAlertsMenu(false);
       }
-      if (roleMenuRef.current && !roleMenuRef.current.contains(event.target as Node)) {
-        setShowRoleMenu(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const rolesList: { role: UserRole; title: string; desc: string }[] = [
-    { role: 'ADMIN', title: '1. Gestor Municipal / ADMIN', desc: 'KPIs gerais, aprovações, gestão de contratos e escolas' },
-    { role: 'NUTRICIONISTA', title: '2. Nutricionista RT', desc: 'Cardápios, cálculo nutricional, projeção de compras' },
-    { role: 'ESCOLA', title: '3. Diretora da Escola', desc: 'Recebimento de entregas (AF), despensa e estoque' },
-    { role: 'FORNECEDOR', title: '4. Agricultor Familiar', desc: 'DAP/CAF R$ 40k, chamadas abertas e propostas de venda' },
-    { role: 'CAE', title: '5. Conselho CAE', desc: 'Fiscalização, controle social e emissão de parecer' },
-  ];
-
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-stone-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
+
           {/* Logo & Município */}
           <div className="flex items-center gap-3">
             {municipio.logo1 ? (
@@ -87,30 +56,9 @@ export const Header: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Role Switcher Bar */}
-          <div className="hidden lg:flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs">
-            <span className="text-stone-500 font-medium px-2 flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5" />
-              Perfil:
-            </span>
-            {(['ADMIN', 'NUTRICIONISTA', 'ESCOLA', 'FORNECEDOR', 'CAE'] as UserRole[]).map(role => (
-              <button
-                key={role}
-                onClick={() => switchRole(role)}
-                className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                  currentRole === role
-                    ? 'bg-white text-emerald-800 shadow-xs font-semibold border border-stone-200'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
-                }`}
-              >
-                {role === 'ADMIN' ? 'Gestor' : role === 'NUTRICIONISTA' ? 'Nutricionista' : role === 'ESCOLA' ? 'Escola' : role === 'FORNECEDOR' ? 'Produtor' : 'CAE'}
-              </button>
-            ))}
-          </div>
-
-          {/* Actions & Profile */}
+          {/* Ações */}
           <div className="flex items-center gap-3">
-            
+
             {/* Notificações em Tempo Real */}
             <div className="relative" ref={alertsMenuRef}>
               <button
@@ -134,94 +82,6 @@ export const Header: React.FC = () => {
               {showAlertsMenu && (
                 <div className="absolute right-0 mt-2 w-80 sm:w-[420px] z-50">
                   <NotificationCenter onClose={() => setShowAlertsMenu(false)} />
-                </div>
-              )}
-            </div>
-
-            {/* Menu Usuário / Role Selector Mobile */}
-            <div className="relative" ref={roleMenuRef}>
-              <button
-                onClick={() => setShowRoleMenu(!showRoleMenu)}
-                className="flex items-center gap-2.5 p-1.5 rounded-xl border border-stone-200 bg-stone-50/80 hover:bg-stone-100 transition"
-              >
-                <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white font-semibold flex items-center justify-center text-xs">
-                  {currentUser?.name.charAt(0) || 'U'}
-                </div>
-                <div className="text-left hidden md:block">
-                  <p className="text-xs font-semibold text-stone-900 leading-tight truncate max-w-[140px]">
-                    {currentUser?.name}
-                  </p>
-                  <p className="text-[10px] text-stone-500">{currentUser?.cargo || currentUser?.role}</p>
-                </div>
-                <ChevronDown className="w-4 h-4 text-stone-400" />
-              </button>
-
-              {showRoleMenu && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-stone-200 p-3 z-50">
-                  <div className="pb-2 mb-2 border-b border-stone-100">
-                    <p className="text-xs font-bold text-stone-900">{currentUser?.name}</p>
-                    <p className="text-[11px] text-stone-500">{currentUser?.email}</p>
-                    <div className="mt-2">
-                      <RoleBadge role={currentRole} />
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider mb-2 px-1">
-                    Simular outro Perfil
-                  </p>
-
-                  <div className="space-y-1">
-                    {rolesList.map(r => (
-                      <button
-                        key={r.role}
-                        onClick={() => {
-                          switchRole(r.role);
-                          setShowRoleMenu(false);
-                        }}
-                        className={`w-full text-left p-2 rounded-lg text-xs transition flex flex-col ${
-                          currentRole === r.role
-                            ? 'bg-emerald-50 text-emerald-900 font-semibold'
-                            : 'hover:bg-stone-100 text-stone-700'
-                        }`}
-                      >
-                        <span>{r.title}</span>
-                        <span className="text-[10px] text-stone-500 font-normal">{r.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="pt-2 mt-2 border-t border-stone-100 space-y-1">
-                    <button
-                      onClick={() => {
-                        setActiveTab('configuracoes');
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-xs font-semibold text-emerald-800 hover:bg-emerald-50 transition"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Configurações do Órgão Gestor</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        resetToMockData();
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-xs text-stone-600 hover:bg-stone-100 transition"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Restaurar Dados Padrão</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 p-2 rounded-lg text-xs text-red-600 hover:bg-red-50 transition"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Sair do Sistema</span>
-                    </button>
-                  </div>
                 </div>
               )}
             </div>

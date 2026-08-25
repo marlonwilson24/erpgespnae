@@ -10,7 +10,6 @@ import {
   Calculator, 
   Download, 
   Plus, 
-  Sparkles, 
   CheckCircle2, 
   HeartPulse,
   Flame,
@@ -50,14 +49,6 @@ export const NutriDashboard: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setActiveTab('ai-nutri-assist')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-xs transition"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Gerador IA de Cardápios</span>
-          </button>
-
           <button
             onClick={() => setShowNovoCardapioModal(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"

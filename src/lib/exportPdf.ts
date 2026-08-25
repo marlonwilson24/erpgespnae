@@ -21,8 +21,43 @@ import {
 } from '../types';
 import { formatCurrency, formatDate } from './utils';
 
+// Cache de logos convertidas para PNG (jsPDF não suporta SVG nativamente)
+const logoCache = new Map<string, string | null>();
+
+function carregarLogoParaPdf(src?: string | null): Promise<string | null> {
+  if (!src) return Promise.resolve(null);
+  const cached = logoCache.get(src);
+  if (cached !== undefined) return Promise.resolve(cached);
+
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas 2D indisponível');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        logoCache.set(src, dataUrl);
+        resolve(dataUrl);
+      } catch {
+        logoCache.set(src, null);
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      logoCache.set(src, null);
+      resolve(null);
+    };
+    img.src = src;
+  });
+}
+
 // Helper to draw official header on any PDF page
-function drawOfficialHeader(
+async function drawOfficialHeader(
   doc: jsPDF, 
   title: string, 
   subtitle: string, 
@@ -36,6 +71,19 @@ function drawOfficialHeader(
   doc.setFillColor(30, 115, 45); // PNAE Green
   doc.rect(0, 0, width, 24, 'F');
 
+  // Logos do Órgão Gestor (esquerda: brasão municipal / direita: logo institucional PNAE)
+  const [logoEsquerda, logoDireita] = await Promise.all([
+    carregarLogoParaPdf(municipio.logo1),
+    carregarLogoParaPdf(municipio.logo2),
+  ]);
+
+  const logoSize = 16;
+  const logoY = (24 - logoSize) / 2;
+
+  if (logoEsquerda) {
+    try { doc.addImage(logoEsquerda, 'PNG', 8, logoY, logoSize, logoSize); } catch { /* ignore */ }
+  }
+
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
@@ -48,6 +96,10 @@ function drawOfficialHeader(
 
   const cnpjText = municipio.cnpj ? ` • CNPJ: ${municipio.cnpj}` : '';
   doc.text(`Exercício: ${municipio.anoExercicio} • Código IBGE: ${municipio.codigoIbge}${cnpjText}`, centerX, 19.5, { align: 'center' });
+
+  if (logoDireita) {
+    try { doc.addImage(logoDireita, 'PNG', width - 8 - logoSize, logoY, logoSize, logoSize); } catch { /* ignore */ }
+  }
 
   // Document Title Bar
   doc.setFillColor(245, 247, 245);
@@ -93,14 +145,14 @@ function addOfficialFooters(doc: jsPDF, docCode: string, isLandscape = false) {
 // ==========================================
 // 1. PRESTAÇÃO DE CONTAS OFICIAL (FNDE / SIGPC)
 // ==========================================
-export function exportPrestacaoContasPDF(
+export async function exportPrestacaoContasPDF(
   pc: PrestacaoContasPNAE, 
   municipio: Municipio, 
   parecer?: ParecerCAE
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Demonstrativo de Prestação de Contas Anual do PNAE',
     `Relatório de Execução Físico-Financeira SIGPC / FNDE • Exercício ${pc.anoExercicio}`,
@@ -193,14 +245,14 @@ export function exportPrestacaoContasPDF(
 // ==========================================
 // 2. PARECER CONCLUSIVO DO CAE (OFICIAL)
 // ==========================================
-export function exportParecerCaeOficialPDF(
+export async function exportParecerCaeOficialPDF(
   parecer: ParecerCAE,
   prestacaoContas: PrestacaoContasPNAE,
   municipio: Municipio
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Parecer Conclusivo do Conselho de Alimentação Escolar',
     `Controle Social e Fiscalização • Ata nº ${parecer.numeroAta} • Exercício ${parecer.anoExercicio}`,
@@ -282,7 +334,7 @@ export function exportParecerCaeOficialPDF(
 // ==========================================
 // 3. RELATÓRIO DE VISITAS E FISCALIZAÇÕES IN LOCO DO CAE
 // ==========================================
-export function exportRelatorioVisitasCaePDF(
+export async function exportRelatorioVisitasCaePDF(
   visitas: {
     id: string;
     escolaNome: string;
@@ -298,7 +350,7 @@ export function exportRelatorioVisitasCaePDF(
 ) {
   const doc = new jsPDF('landscape');
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Relatório de Fiscalização e Inspeções Sanitárias In Loco nas Escolas',
     'Conselho de Alimentação Escolar (CAE) • Acompanhamento das Condições de Armazenamento, Cozinha e Merenda',
@@ -343,7 +395,7 @@ export function exportRelatorioVisitasCaePDF(
 // ==========================================
 // 4. RELATÓRIO COMPLETO GERENCIAL PNAE (ADMIN)
 // ==========================================
-export function exportRelatorioAdminPDF(
+export async function exportRelatorioAdminPDF(
   escolas: Escola[],
   contratos: ContratoFornecedor[],
   entregas: EntregaMercadoria[],
@@ -352,7 +404,7 @@ export function exportRelatorioAdminPDF(
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Relatório Gerencial Consolidado da Alimentação Escolar',
     `Panorama Geral da Rede Municipal • Escolas, Contratos da Agricultura Familiar e Entregas • Exercício ${municipio.anoExercicio}`,
@@ -400,7 +452,7 @@ export function exportRelatorioAdminPDF(
 
   if (nextY > 230) {
     doc.addPage();
-    drawOfficialHeader(doc, 'Relatório Gerencial Consolidado - Contratos e Entregas', 'Continuação', municipio);
+    await drawOfficialHeader(doc, 'Relatório Gerencial Consolidado - Contratos e Entregas', 'Continuação', municipio);
     nextY = 46;
   }
 
@@ -432,7 +484,7 @@ export function exportRelatorioAdminPDF(
 
   if (nextY > 230) {
     doc.addPage();
-    drawOfficialHeader(doc, 'Relatório Gerencial Consolidado - Histórico de Entregas', 'Continuação', municipio);
+    await drawOfficialHeader(doc, 'Relatório Gerencial Consolidado - Histórico de Entregas', 'Continuação', municipio);
     nextY = 46;
   }
 
@@ -466,10 +518,10 @@ export function exportRelatorioAdminPDF(
 // ==========================================
 // 5. RELATÓRIO ESPECÍFICO DE ESCOLAS E MATRÍCULAS
 // ==========================================
-export function exportRelatorioEscolasPDF(escolas: Escola[], municipio: Municipio) {
+export async function exportRelatorioEscolasPDF(escolas: Escola[], municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Relatório de Atendimento e Matrículas por Unidade Escolar',
     `Censo Escolar e Distribuição da Demanda de Alimentação • Exercício ${municipio.anoExercicio}`,
@@ -502,10 +554,10 @@ export function exportRelatorioEscolasPDF(escolas: Escola[], municipio: Municipi
 // ==========================================
 // 6. RELATÓRIO ESPECÍFICO DE CONTRATOS DA AGRICULTURA FAMILIAR
 // ==========================================
-export function exportRelatorioContratosAFPDF(contratos: ContratoFornecedor[], municipio: Municipio) {
+export async function exportRelatorioContratosAFPDF(contratos: ContratoFornecedor[], municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Relatório de Contratos Vigentes da Agricultura Familiar',
     `Controle de Cumprimento do Art. 14 da Lei 11.947/2009 e Teto Anual da DAP/CAF (R$ 40 mil)`,
@@ -542,10 +594,10 @@ export function exportRelatorioContratosAFPDF(contratos: ContratoFornecedor[], m
 // ==========================================
 // 7. RELATÓRIO ESPECÍFICO DE ENTREGAS E CONFERÊNCIA
 // ==========================================
-export function exportRelatorioEntregasPDF(entregas: EntregaMercadoria[], municipio: Municipio) {
+export async function exportRelatorioEntregasPDF(entregas: EntregaMercadoria[], municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Registro Histórico de Entregas e Conferência nas Escolas',
     `Rastreabilidade das Remessas, Pareceres de Qualidade e Conformidade FNDE`,
@@ -578,7 +630,7 @@ export function exportRelatorioEntregasPDF(entregas: EntregaMercadoria[], munici
 // ==========================================
 // 8. PROJEÇÃO DE COMPRAS E DEMANDA NUTRICIONAL
 // ==========================================
-export function exportProjecaoComprasPDF(
+export async function exportProjecaoComprasPDF(
   cardapio: Cardapio,
   totalAlunos: number,
   diasLetivosMes: number,
@@ -595,7 +647,7 @@ export function exportProjecaoComprasPDF(
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Projeção Oficial de Compras e Estimativa de Demanda PNAE',
     `Planejamento de Aquisição: ${totalAlunos.toLocaleString('pt-BR')} Alunos • ${diasLetivosMes} Dias Letivos • Cardápio: ${cardapio.titulo}`,
@@ -652,14 +704,14 @@ export function exportProjecaoComprasPDF(
 // ==========================================
 // 9. INVENTÁRIO E ESTOQUE DA DESPENSA ESCOLAR
 // ==========================================
-export function exportInventarioEstoquePDF(
+export async function exportInventarioEstoquePDF(
   escola: Escola,
   itensEstoque: EstoqueItemEscola[],
   municipio: Municipio
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Relatório de Inventário e Saldo da Despensa Escolar',
     `Unidade Escolar: ${escola.nome} (INEP ${escola.codigoInep}) • Responsável: ${escola.responsavelMerendaNome}`,
@@ -716,10 +768,10 @@ export function exportInventarioEstoquePDF(
 // ==========================================
 // 10. TRILHA DE AUDITORIA E LOGS DE CONFORMIDADE
 // ==========================================
-export function exportAuditoriaLogsPDF(logs: AuditoriaLog[], municipio: Municipio) {
+export async function exportAuditoriaLogsPDF(logs: AuditoriaLog[], municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Trilha de Auditoria e Logs de Conformidade Legal PNAE',
     'Registro Imutável de Operações Sensíveis: Homologações, Atas do CAE, AFs e Recebimentos',
@@ -759,7 +811,7 @@ export function exportAuditoriaLogsPDF(logs: AuditoriaLog[], municipio: Municipi
 // ==========================================
 // 11. EXTRATO DO PRODUTOR RURAL / FORNECEDOR AF
 // ==========================================
-export function exportExtratoProdutorPDF(
+export async function exportExtratoProdutorPDF(
   user: UserProfile,
   contratos: ContratoFornecedor[],
   afs: AutorizacaoFornecimento[],
@@ -768,7 +820,7 @@ export function exportExtratoProdutorPDF(
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Extrato Financeiro e de Fornecimento do Produtor Rural',
     `Agricultura Familiar • DAP/CAF: ${user.fornecedorDapCaf || 'CAF-REGULAR'} • Exercício ${municipio.anoExercicio}`,
@@ -843,10 +895,10 @@ export function exportExtratoProdutorPDF(
 // ==========================================
 // 12. CARDÁPIO OFICIAL PNAE (EXISTENTE MELHORADO)
 // ==========================================
-export function exportCardapioPDF(cardapio: Cardapio, municipio: Municipio) {
+export async function exportCardapioPDF(cardapio: Cardapio, municipio: Municipio) {
   const doc = new jsPDF('landscape');
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Cardápio Oficial da Alimentação Escolar',
     `${cardapio.titulo} • Etapa: ${cardapio.etapaEnsino} • Nutricionista RT: ${cardapio.nutricionistaNome} (${cardapio.nutricionistaCrn})`,
@@ -896,10 +948,10 @@ export function exportCardapioPDF(cardapio: Cardapio, municipio: Municipio) {
 // ==========================================
 // 13. TERMO DE RECEBIMENTO DE MERCADORIAS (EXISTENTE MELHORADO)
 // ==========================================
-export function exportTermoRecebimentoPDF(entrega: EntregaMercadoria, municipio: Municipio) {
+export async function exportTermoRecebimentoPDF(entrega: EntregaMercadoria, municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Termo Oficial de Recebimento e Conferência de Alimentos',
     `Unidade Escolar: ${entrega.escolaNome} • Autorização de Fornecimento nº ${entrega.numeroAF}`,
@@ -964,10 +1016,10 @@ export function exportTermoRecebimentoPDF(entrega: EntregaMercadoria, municipio:
 // ==========================================
 // 14. EDITAL DE CHAMADA PÚBLICA (EXISTENTE MELHORADO)
 // ==========================================
-export function exportChamadaPublicaPDF(cp: ChamadaPublica, municipio: Municipio) {
+export async function exportChamadaPublicaPDF(cp: ChamadaPublica, municipio: Municipio) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     `Edital de Chamada Pública nº ${cp.numeroEdital}`,
     `Aquisição Exclusiva de Gêneros da Agricultura Familiar • Art. 14 da Lei nº 11.947/2009`,
@@ -1017,7 +1069,7 @@ export function exportChamadaPublicaPDF(cp: ChamadaPublica, municipio: Municipio
 // ==========================================
 // 8. FICHA CADASTRAL DO ÓRGÃO GESTOR (EEx)
 // ==========================================
-export function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
+export async function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
   const doc = new jsPDF('p', 'mm', 'a4');
   const munData: Municipio = {
     id: orgao.id || 'mun-01',
@@ -1036,9 +1088,11 @@ export function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
     gestorNome: orgao.gestorNome,
     gestorCargo: orgao.gestorCargo,
     portaria: orgao.portaria,
+    logo1: orgao.logo1,
+    logo2: orgao.logo2,
   };
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'FICHA CADASTRAL DA ENTIDADE EXECUTORA (EEx) - PNAE',
     `Cadastro Institucional Oficial • Exercício ${munData.anoExercicio} • Lei Federal nº 11.947/2009`,
@@ -1144,13 +1198,13 @@ export function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
 // ==========================================
 // 12. COMPOSIÇÃO OFICIAL DO COLEGIADO CAE
 // ==========================================
-export function exportFichaColegiadoCaePDF(
+export async function exportFichaColegiadoCaePDF(
   membros: MembroCAE[],
   municipio: Municipio
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Ficha de Composição do Conselho de Alimentação Escolar (CAE)',
     'Quadro Oficial de Conselheiros Titulares e Suplentes • Mandato 2024-2028 • Lei nº 11.947/2009',
@@ -1231,13 +1285,13 @@ export function exportFichaColegiadoCaePDF(
 // ==========================================
 // 15. CHECKLIST DE CONFORMIDADE IN LOCO (LEI 11.947/2009)
 // ==========================================
-export function exportChecklistConformidadePDF(
+export async function exportChecklistConformidadePDF(
   data: ChecklistConformidadeData,
   municipio: Municipio
 ) {
   const doc = new jsPDF();
 
-  drawOfficialHeader(
+  await drawOfficialHeader(
     doc,
     'Laudo de Vistoria e Checklist de Conformidade In Loco',
     `Avaliação Técnica Sanitária e Nutricional • Lei Federal nº 11.947/2009 • Res. CD/FNDE nº 06/2020`,
@@ -1303,7 +1357,7 @@ export function exportChecklistConformidadePDF(
 
   if (nextY > 230) {
     doc.addPage();
-    drawOfficialHeader(doc, 'Laudo de Vistoria e Checklist de Conformidade', 'Parecer e Recomendações', municipio);
+    await drawOfficialHeader(doc, 'Laudo de Vistoria e Checklist de Conformidade', 'Parecer e Recomendações', municipio);
     nextY = 46;
   }
 

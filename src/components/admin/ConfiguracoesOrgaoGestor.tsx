@@ -1,28 +1,32 @@
 import React, { useState, useRef } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
 import { exportFichaCadastralOrgaoPDF } from '../../lib/exportPdf';
-import { 
-  Building2, 
-  Save, 
-  RotateCcw, 
-  Upload, 
-  Trash2, 
-  Eye, 
-  CheckCircle2, 
-  FileText, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  UserCheck, 
-  Scroll, 
-  Image, 
-  Sparkles, 
-  ShieldCheck, 
+import { GestaoUsuariosSection } from './GestaoUsuariosSection';
+import { sincronizarMunicipio, ResultadoSincronizacao } from '../../lib/gestaoMunicipio';
+import { formatCurrency } from '../../lib/utils';
+import {
+  Building2,
+  Save,
+  RotateCcw,
+  Upload,
+  Trash2,
+  Eye,
+  CheckCircle2,
+  FileText,
+  Mail,
+  Phone,
+  MapPin,
+  UserCheck,
+  Scroll,
+  Image,
+  Sparkles,
+  ShieldCheck,
   Download,
   AlertCircle,
   Hash,
   Landmark,
-  Calendar
+  Calendar,
+  Users
 } from 'lucide-react';
 
 // Preset sample logos in SVG format (ready to use and crisp)
@@ -57,7 +61,7 @@ const LOGO2_PRESETS = [
 ];
 
 export const ConfiguracoesOrgaoGestor: React.FC = () => {
-  const { municipio, updateMunicipio } = usePNAE();
+  const { municipio, updateMunicipio, addAuditoriaLog } = usePNAE();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -67,6 +71,9 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
     cnpj: municipio.cnpj || '18.345.912/0001-44',
     codigoIbge: municipio.codigoIbge || '4316808',
     anoExercicio: municipio.anoExercicio || 2026,
+    totalAlunosPNAE: municipio.totalAlunosPNAE ?? 0,
+    orcamentoAnualFNDE: municipio.orcamentoAnualFNDE ?? 0,
+    orcamentoContrapartida: municipio.orcamentoContrapartida ?? 0,
     endereco: municipio.endereco || 'Avenida 28 de Maio, nº 1420 - Centro, CEP 95915-000, Santa Clara do Sul - RS',
     email: municipio.email || 'educacao@santaclaradosul.rs.gov.br',
     telefone: municipio.telefone || '(51) 3782-1200 / (51) 99845-7120',
@@ -78,7 +85,8 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
   });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [activeTabSection, setActiveTabSection] = useState<'geral' | 'contatos' | 'gestao' | 'logos' | 'preview'>('geral');
+  const [syncResultado, setSyncResultado] = useState<ResultadoSincronizacao | null>(null);
+  const [activeTabSection, setActiveTabSection] = useState<'geral' | 'contatos' | 'gestao' | 'logos' | 'usuarios' | 'preview'>('geral');
 
   const fileInputLogo1Ref = useRef<HTMLInputElement>(null);
   const fileInputLogo2Ref = useRef<HTMLInputElement>(null);
@@ -106,11 +114,32 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     updateMunicipio(formData);
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 4000);
+
+    // Sincroniza os dados do município com a tabela public.municipios (Supabase)
+    const resultadoSync = await sincronizarMunicipio({
+      nome: formData.nome,
+      uf: formData.uf,
+      codigoIbge: formData.codigoIbge,
+      totalAlunosPnae: Number(formData.totalAlunosPNAE) || 0,
+      orcamentoAnualFnde: Number(formData.orcamentoAnualFNDE) || 0,
+      orcamentoContrapartida: Number(formData.orcamentoContrapartida) || 0,
+      anoExercicio: Number(formData.anoExercicio) || 2026,
+    });
+    setSyncResultado(resultadoSync);
+
+    if (resultadoSync.sucesso && resultadoSync.destino === 'supabase') {
+      addAuditoriaLog(
+        'Sincronização Cadastral do Município',
+        'Configurações do Órgão Gestor',
+        `Dados de ${formData.nome}-${formData.uf} (IBGE ${formData.codigoIbge}) gravados na tabela public.municipios: ${Number(formData.totalAlunosPNAE).toLocaleString('pt-BR')} alunos, FNDE R$ ${Number(formData.orcamentoAnualFNDE).toFixed(2)}`
+      );
+    }
+
+    setTimeout(() => setSavedSuccess(false), 6000);
   };
 
   const handleResetDefaults = () => {
@@ -122,6 +151,9 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
         cnpj: '18.345.912/0001-44',
         codigoIbge: '4316808',
         anoExercicio: 2026,
+        totalAlunosPNAE: 4250,
+        orcamentoAnualFNDE: 720000.0,
+        orcamentoContrapartida: 280000.0,
         endereco: 'Avenida 28 de Maio, nº 1420 - Centro, CEP 95915-000, Santa Clara do Sul - RS',
         email: 'educacao@santaclaradosul.rs.gov.br',
         telefone: '(51) 3782-1200 / (51) 99845-7120',
@@ -132,6 +164,7 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
         logo2: LOGO2_PRESETS[0].svg,
       };
       setFormData(defaultData);
+      setSyncResultado(null);
       updateMunicipio(defaultData);
     }
   };
@@ -198,14 +231,33 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
 
       {/* Alerta de Sucesso ao Salvar */}
       {savedSuccess && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between animate-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
-            <div className="text-xs">
-              <strong className="font-bold">Dados salvos com sucesso!</strong> Todas as alterações institucionais, contatos e logomarcas foram sincronizadas e aplicadas aos relatórios em PDF do sistema.
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-start justify-between gap-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1.5">
+              <strong className="font-bold block">Dados salvos com sucesso!</strong>
+              <span className="block">
+                Todas as alterações institucionais, contatos e logomarcas foram sincronizadas e aplicadas aos relatórios em PDF do sistema.
+              </span>
+              {syncResultado && syncResultado.sucesso && (
+                <span className={`block p-2 rounded-lg border ${
+                  syncResultado.destino === 'supabase'
+                    ? 'bg-white/70 border-emerald-300 text-emerald-900'
+                    : 'bg-stone-100 border-stone-300 text-stone-700'
+                }`}>
+                  {syncResultado.destino === 'supabase'
+                    ? '🗄️ Dados do município (alunos, orçamentos e exercício) gravados na tabela public.municipios do Supabase.'
+                    : '💾 Dados do município salvos localmente (modo demonstração). Configure SUPABASE_SERVICE_ROLE_KEY para gravar na tabela public.municipios.'}
+                </span>
+              )}
+              {syncResultado && !syncResultado.sucesso && (
+                <span className="block p-2 rounded-lg bg-red-50 border border-red-300 text-red-800">
+                  ⚠️ Falha ao gravar na tabela public.municipios: {syncResultado.erro}
+                </span>
+              )}
             </div>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+          <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
             Sincronizado
           </span>
         </div>
@@ -267,6 +319,19 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTabSection('usuarios')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition shrink-0 ${
+            activeTabSection === 'usuarios'
+              ? 'bg-emerald-700 text-white shadow-xs'
+              : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>5. Usuários & Perfis de Acesso</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTabSection('preview')}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition shrink-0 ${
             activeTabSection === 'preview'
@@ -275,7 +340,7 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
           }`}
         >
           <Eye className="w-3.5 h-3.5" />
-          <span>5. Pré-Visualização do Timbrado</span>
+          <span>6. Pré-Visualização do Timbrado</span>
         </button>
       </div>
 
@@ -387,6 +452,73 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
                   onChange={e => handleInputChange('anoExercicio', parseInt(e.target.value) || 2026)}
                   className="w-full px-3.5 py-2.5 text-xs font-mono bg-stone-50/50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-600"
                 />
+              </div>
+
+              {/* Subseção: Dados do Município (tabela public.municipios) */}
+              <div className="md:col-span-12 pt-2 border-t border-dashed border-stone-200">
+                <h3 className="text-xs font-bold text-stone-800 flex items-center gap-2">
+                  <Hash className="w-3.5 h-3.5 text-emerald-700" />
+                  Cadastro do Município — Demanda e Orçamento PNAE
+                </h3>
+                <p className="text-[10.5px] text-stone-500 mt-0.5">
+                  Estes dados alimentam a tabela <span className="font-mono">public.municipios</span> no Supabase e todos os cálculos percentuais dos relatórios.
+                </p>
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Total de Alunos da Rede (Censo PNAE) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={formData.totalAlunosPNAE}
+                  onChange={e => handleInputChange('totalAlunosPNAE', parseInt(e.target.value) || 0)}
+                  placeholder="Ex: 4250"
+                  className="w-full px-3.5 py-2.5 text-xs font-mono bg-stone-50/50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-600"
+                />
+                <p className="text-[10.5px] text-stone-600 mt-1">
+                  {Number(formData.totalAlunosPNAE).toLocaleString('pt-BR')} matrículas • base do repasse per capita do FNDE.
+                </p>
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Orçamento Anual FNDE (R$) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step="0.01"
+                  value={formData.orcamentoAnualFNDE}
+                  onChange={e => handleInputChange('orcamentoAnualFNDE', parseFloat(e.target.value) || 0)}
+                  placeholder="Ex: 720000.00"
+                  className="w-full px-3.5 py-2.5 text-xs font-mono bg-stone-50/50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-600"
+                />
+                <p className="text-[10.5px] text-stone-600 mt-1">
+                  {formatCurrency(Number(formData.orcamentoAnualFNDE))} • recursos federais vinculados.
+                </p>
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Contrapartida Municipal (R$) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step="0.01"
+                  value={formData.orcamentoContrapartida}
+                  onChange={e => handleInputChange('orcamentoContrapartida', parseFloat(e.target.value) || 0)}
+                  placeholder="Ex: 280000.00"
+                  className="w-full px-3.5 py-2.5 text-xs font-mono bg-stone-50/50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-600"
+                />
+                <p className="text-[10.5px] text-stone-600 mt-1">
+                  {formatCurrency(Number(formData.orcamentoContrapartida))} • recurso próprio do tesouro municipal.
+                </p>
               </div>
             </div>
 
@@ -888,6 +1020,9 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
         </div>
 
       </form>
+
+      {/* SEÇÃO 5: USUÁRIOS & PERFIS DE ACESSO (fora do form principal para não aninhar formulários) */}
+      {activeTabSection === 'usuarios' && <GestaoUsuariosSection />}
 
     </div>
   );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { usePNAE } from '../../context/PNAEContext';
-import { SidebarQuickChat } from '../common/SidebarQuickChat';
-import { 
+import { RoleBadge } from './RoleBadge';
+import {
   LayoutDashboard, 
   Utensils, 
   Carrot, 
@@ -22,7 +22,8 @@ import {
   Building2,
   MessageSquare,
   ExternalLink,
-  Globe
+  Globe,
+  LogOut
 } from 'lucide-react';
 
 interface MenuItem {
@@ -33,7 +34,7 @@ interface MenuItem {
 }
 
 export const Sidebar: React.FC = () => {
-  const { currentRole, activeTab, setActiveTab, chamadasPublicas, entregas, cardapios } = usePNAE();
+  const { currentUser, currentRole, activeTab, setActiveTab, logout, chamadasPublicas, entregas, cardapios } = usePNAE();
 
   const openCallsCount = chamadasPublicas.filter(c => c.status === 'Publicada' || c.status === 'Em Análise de Propostas').length;
   const transitDeliveriesCount = entregas.length;
@@ -141,7 +142,7 @@ export const Sidebar: React.FC = () => {
         })}
       </div>
 
-      <div>
+      <div className="space-y-4">
         {/* Box de Informações Legais PNAE */}
         <div className="mt-8 p-3 rounded-xl bg-emerald-50 border border-emerald-200/80 text-xs text-emerald-950">
           <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-1">
@@ -153,8 +154,38 @@ export const Sidebar: React.FC = () => {
           </p>
         </div>
 
-        {/* Chat Rápido com IA */}
-        <SidebarQuickChat />
+        {/* Rodapé: Usuário Logado & Sair */}
+        <div className="pt-3 border-t border-stone-200 space-y-2">
+          <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-stone-200 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white font-semibold flex items-center justify-center text-xs shrink-0">
+              {currentUser?.name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-stone-900 truncate" title={currentUser?.name}>
+                {currentUser?.name || 'Usuário'}
+              </p>
+              <p className="text-[10px] text-stone-500 truncate" title={currentUser?.email}>
+                {currentUser?.email}
+              </p>
+              {currentUser?.cargo && (
+                <p className="text-[9.5px] text-stone-400 truncate" title={currentUser.cargo}>
+                  {currentUser.cargo}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <RoleBadge role={currentRole} size="sm" />
+
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-semibold transition"
+            title="Encerrar sessão"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sair do Sistema</span>
+          </button>
+        </div>
       </div>
     </aside>
   );

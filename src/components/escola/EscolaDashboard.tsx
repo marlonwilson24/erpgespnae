@@ -10,7 +10,6 @@ import {
   AlertTriangle, 
   Clock, 
   ArrowRight,
-  Sparkles,
   Calendar,
   Radio,
   BellRing
@@ -27,7 +26,6 @@ export const EscolaDashboard: React.FC = () => {
     entregas, 
     alertas,
     markAlertaLido,
-    triggerSimulacaoNotificacao,
     setActiveTab 
   } = usePNAE();
 
@@ -82,17 +80,8 @@ export const EscolaDashboard: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => triggerSimulacaoNotificacao('entrega_chegando')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold shadow-2xs transition"
-            title="Simula o recebimento em tempo real de uma entrega de agricultor familiar"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Simular Chegada de Entrega</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('estoque-escola')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs transition"
           >
             <Package className="w-3.5 h-3.5" />
             <span>Despensa e Estoque</span>
