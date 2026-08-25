@@ -15,7 +15,6 @@ import {
   Sparkles,
   ClipboardList,
   Scale,
-  Database,
   History,
   Tractor,
   DollarSign,
@@ -52,7 +51,6 @@ export const Sidebar: React.FC = () => {
           { id: 'prestacao-contas', label: 'Prestação de Contas', icon: <FileCheck className="w-4 h-4" /> },
           { id: 'relatorios', label: 'Relatórios Físico-Financeiros', icon: <ClipboardList className="w-4 h-4" /> },
           { id: 'configuracoes', label: 'Configurações (Órgão Gestor)', icon: <Settings className="w-4 h-4" /> },
-          { id: 'sql-migration', label: 'Schema SQL Supabase', icon: <Database className="w-4 h-4" /> },
           { id: 'auditoria', label: 'Logs de Auditoria', icon: <History className="w-4 h-4" /> },
         ];
 

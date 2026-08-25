@@ -10,7 +10,6 @@ import {
   ChevronDown, 
   Building2, 
   Layers,
-  Database,
   Volume2,
   VolumeX,
   Settings,
@@ -112,16 +111,6 @@ export const Header: React.FC = () => {
           {/* Actions & Profile */}
           <div className="flex items-center gap-3">
             
-            {/* Botão Schema Supabase */}
-            <button
-              onClick={() => setActiveTab('sql-migration')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
-              title="Visualizar Schema SQL e Migrações do Supabase"
-            >
-              <Database className="w-3.5 h-3.5 text-emerald-600" />
-              <span>SQL Supabase</span>
-            </button>
-
             {/* Notificações em Tempo Real */}
             <div className="relative" ref={alertsMenuRef}>
               <button
