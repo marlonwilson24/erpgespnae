@@ -1,14 +1,8 @@
 import React, { useState } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
-import { mockUsers } from '../../data/mockData';
 import { UserRole } from '../../types';
 import { enviarLinkRecuperacao, traduzirErroAuth } from '../../lib/auth';
 import {
-  Shield,
-  Apple,
-  School,
-  Tractor,
-  Scale,
   Lock,
   Mail,
   ArrowRight,
@@ -18,11 +12,10 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  FlaskConical,
 } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
-  const { login, switchRole } = usePNAE();
+  const { login } = usePNAE();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -33,7 +26,6 @@ export const AuthView: React.FC = () => {
   const [forgotCarregando, setForgotCarregando] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotError, setForgotError] = useState('');
-  const [showDemoAccess, setShowDemoAccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,55 +183,6 @@ export const AuthView: React.FC = () => {
               <div className="relative flex justify-center text-xs">
                 <span className="px-2 bg-white text-stone-500 font-medium">ou</span>
               </div>
-            </div>
-
-            {/* Acesso Demonstração */}
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowDemoAccess(prev => !prev)}
-                className="w-full flex items-center justify-center gap-1.5 text-[11px] font-semibold text-stone-500 hover:text-stone-700 transition"
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                <span>{showDemoAccess ? 'Ocultar' : 'Acesso'} Demonstração (sem autenticação)</span>
-              </button>
-
-              {showDemoAccess && (
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  {mockUsers.map(user => {
-                    const getRoleIcon = (role: UserRole) => {
-                      switch (role) {
-                        case 'ADMIN': return <Shield className="w-4 h-4 text-emerald-700" />;
-                        case 'NUTRICIONISTA': return <Apple className="w-4 h-4 text-teal-700" />;
-                        case 'ESCOLA': return <School className="w-4 h-4 text-blue-700" />;
-                        case 'FORNECEDOR': return <Tractor className="w-4 h-4 text-amber-700" />;
-                        case 'CAE': return <Scale className="w-4 h-4 text-indigo-700" />;
-                      }
-                    };
-
-                    return (
-                      <button
-                        key={user.id}
-                        onClick={() => switchRole(user.role)}
-                        className="flex items-center justify-between p-2.5 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-white transition">
-                            {getRoleIcon(user.role)}
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-stone-900">{user.name}</p>
-                            <p className="text-[11px] text-stone-500">{user.cargo || user.role}</p>
-                          </div>
-                        </div>
-                        <span className="text-[11px] font-semibold text-emerald-700 group-hover:translate-x-0.5 transition-transform">
-                          Entrar →
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </div>
         </div>

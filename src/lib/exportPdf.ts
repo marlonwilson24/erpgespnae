@@ -21,8 +21,22 @@ import {
 } from '../types';
 import { formatCurrency, formatDate } from './utils';
 
+interface DocWithAutoTable extends jsPDF {
+  lastAutoTable?: {
+    finalY: number;
+  };
+}
+
+function getFinalYWithOffset(doc: jsPDF, offset: number, fallback: number): number {
+  const docWithTable = doc as DocWithAutoTable;
+  return docWithTable.lastAutoTable?.finalY
+    ? docWithTable.lastAutoTable.finalY + offset
+    : fallback;
+}
+
 // Cache de logos convertidas para PNG (jsPDF não suporta SVG nativamente)
 const logoCache = new Map<string, string | null>();
+
 
 function carregarLogoParaPdf(src?: string | null): Promise<string | null> {
   if (!src) return Promise.resolve(null);
@@ -202,8 +216,7 @@ export async function exportPrestacaoContasPDF(
   });
 
   // Parecer do CAE
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 140;
+  const finalY = getFinalYWithOffset(doc, 8, 140);
 
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
@@ -292,8 +305,8 @@ export async function exportParecerCaeOficialPDF(
     }
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 130;
+  const finalY = getFinalYWithOffset(doc, 8, 130);
+
 
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
@@ -447,8 +460,7 @@ export async function exportRelatorioAdminPDF(
   });
 
   // Tabela 2: Contratos AF
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  let nextY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 140;
+  let nextY = getFinalYWithOffset(doc, 8, 140);
 
   if (nextY > 230) {
     doc.addPage();
@@ -479,8 +491,8 @@ export async function exportRelatorioAdminPDF(
   });
 
   // Tabela 3: Entregas
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  nextY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 200;
+  nextY = getFinalYWithOffset(doc, 8, 200);
+
 
   if (nextY > 230) {
     doc.addPage();
@@ -746,8 +758,7 @@ export async function exportInventarioEstoquePDF(
     styles: { fontSize: 7.5, cellPadding: 2 },
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 25 : 220;
+  const finalY = getFinalYWithOffset(doc, 25, 220);
   const sigY = Math.min(finalY, 250);
 
   doc.setLineWidth(0.5);
@@ -864,8 +875,7 @@ export async function exportExtratoProdutorPDF(
   });
 
   // Tabela de Autorizações de Fornecimento
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  let nextY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 120;
+  let nextY = getFinalYWithOffset(doc, 8, 120);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
@@ -932,8 +942,7 @@ export async function exportCardapioPDF(cardapio: Cardapio, municipio: Municipio
     },
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : 170;
+  const finalY = getFinalYWithOffset(doc, 6, 170);
   doc.setTextColor(50, 50, 50);
   doc.setFontSize(8);
   doc.text(`Legenda: [AF] = Gênero proveniente da Agricultura Familiar (Art. 14 Lei 11.947/2009). % Estimado de AF no Cardápio: ${cardapio.percentualAgriFamiliarEstimado}%`, 14, finalY);
@@ -986,8 +995,8 @@ export async function exportTermoRecebimentoPDF(entrega: EntregaMercadoria, muni
     styles: { fontSize: 8, cellPadding: 2.5 },
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 140;
+  const finalY = getFinalYWithOffset(doc, 8, 140);
+
 
   if (entrega.observacoes) {
     doc.setFontSize(8.5);
@@ -1126,7 +1135,7 @@ export async function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
     },
   });
 
-  const lastY1 = (doc as any).lastAutoTable.finalY + 6;
+  const lastY1 = getFinalYWithOffset(doc, 6, 100);
 
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
@@ -1150,7 +1159,7 @@ export async function exportFichaCadastralOrgaoPDF(orgao: Partial<Municipio>) {
     },
   });
 
-  const lastY2 = (doc as any).lastAutoTable.finalY + 8;
+  const lastY2 = getFinalYWithOffset(doc, 8, 160);
 
   doc.setFillColor(245, 248, 245);
   doc.rect(14, lastY2, 182, 34, 'F');
@@ -1251,8 +1260,7 @@ export async function exportFichaColegiadoCaePDF(
     }
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  const lastY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 200;
+  const lastY = getFinalYWithOffset(doc, 12, 200);
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
@@ -1352,8 +1360,8 @@ export async function exportChecklistConformidadePDF(
     }
   });
 
-  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
-  let nextY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : 210;
+  let nextY = getFinalYWithOffset(doc, 6, 210);
+
 
   if (nextY > 230) {
     doc.addPage();

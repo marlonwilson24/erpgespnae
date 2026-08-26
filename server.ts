@@ -11,6 +11,9 @@ const PORT = 3000;
 
 app.use(express.json());
 
+import municipiosHandler from './api/municipios';
+import adminUsuariosHandler from './api/admin-usuarios';
+
 // API endpoint for PNAE Legal & Technical Chat
 app.post('/api/chat-suporte-pnae', async (req, res) => {
   try {
@@ -34,6 +37,12 @@ app.post('/api/chat-suporte-pnae', async (req, res) => {
   }
 });
 
+// Municipios API
+app.all('/api/municipios', (req, res) => municipiosHandler(req, res));
+
+// Admin Usuarios API
+app.all('/api/admin-usuarios', (req, res) => adminUsuariosHandler(req, res));
+
 // Health endpoint
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -42,6 +51,7 @@ app.get('/api/health', (_req, res) => {
     aiConfigured: !!process.env.GEMINI_API_KEY,
   });
 });
+
 
 // Vite Middleware for development vs Static serving for production
 async function startServer() {

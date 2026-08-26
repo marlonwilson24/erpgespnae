@@ -8,7 +8,6 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Calendar, 
-  Sparkles, 
   Search,
   Filter,
   Clock,
@@ -25,8 +24,7 @@ export const EstoqueEscolaView: React.FC = () => {
     estoqueEscolas, 
     municipio,
     darBaixaEstoque, 
-    consumirEstoque,
-    triggerSimulacaoNotificacao 
+    consumirEstoque
   } = usePNAE();
   
   const escolaAtual = escolas.find(e => e.id === currentUser?.escolaId) || escolas[0];
@@ -108,15 +106,6 @@ export const EstoqueEscolaView: React.FC = () => {
           >
             <Download className="w-3.5 h-3.5 text-stone-500" />
             <span>Exportar Inventário (PDF)</span>
-          </button>
-
-          <button
-            onClick={() => triggerSimulacaoNotificacao('validade_urgente')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold shadow-2xs transition"
-            title="Simula alerta de alimento vencendo em breve"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Simular Alerta de Validade</span>
           </button>
 
           <button

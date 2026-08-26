@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
 import { exportFichaCadastralOrgaoPDF } from '../../lib/exportPdf';
 import { GestaoUsuariosSection } from './GestaoUsuariosSection';
-import { sincronizarMunicipio, ResultadoSincronizacao } from '../../lib/gestaoMunicipio';
 import { formatCurrency } from '../../lib/utils';
 import {
   Building2,
@@ -61,7 +60,7 @@ const LOGO2_PRESETS = [
 ];
 
 export const ConfiguracoesOrgaoGestor: React.FC = () => {
-  const { municipio, updateMunicipio, addAuditoriaLog } = usePNAE();
+  const { municipio, updateMunicipio } = usePNAE();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -85,7 +84,6 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
   });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
-  const [syncResultado, setSyncResultado] = useState<ResultadoSincronizacao | null>(null);
   const [activeTabSection, setActiveTabSection] = useState<'geral' | 'contatos' | 'gestao' | 'logos' | 'usuarios' | 'preview'>('geral');
 
   const fileInputLogo1Ref = useRef<HTMLInputElement>(null);
@@ -118,27 +116,6 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
     e.preventDefault();
     updateMunicipio(formData);
     setSavedSuccess(true);
-
-    // Sincroniza os dados do município com a tabela public.municipios (Supabase)
-    const resultadoSync = await sincronizarMunicipio({
-      nome: formData.nome,
-      uf: formData.uf,
-      codigoIbge: formData.codigoIbge,
-      totalAlunosPnae: Number(formData.totalAlunosPNAE) || 0,
-      orcamentoAnualFnde: Number(formData.orcamentoAnualFNDE) || 0,
-      orcamentoContrapartida: Number(formData.orcamentoContrapartida) || 0,
-      anoExercicio: Number(formData.anoExercicio) || 2026,
-    });
-    setSyncResultado(resultadoSync);
-
-    if (resultadoSync.sucesso && resultadoSync.destino === 'supabase') {
-      addAuditoriaLog(
-        'Sincronização Cadastral do Município',
-        'Configurações do Órgão Gestor',
-        `Dados de ${formData.nome}-${formData.uf} (IBGE ${formData.codigoIbge}) gravados na tabela public.municipios: ${Number(formData.totalAlunosPNAE).toLocaleString('pt-BR')} alunos, FNDE R$ ${Number(formData.orcamentoAnualFNDE).toFixed(2)}`
-      );
-    }
-
     setTimeout(() => setSavedSuccess(false), 6000);
   };
 
@@ -164,7 +141,6 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
         logo2: LOGO2_PRESETS[0].svg,
       };
       setFormData(defaultData);
-      setSyncResultado(null);
       updateMunicipio(defaultData);
     }
   };
@@ -239,22 +215,9 @@ export const ConfiguracoesOrgaoGestor: React.FC = () => {
               <span className="block">
                 Todas as alterações institucionais, contatos e logomarcas foram sincronizadas e aplicadas aos relatórios em PDF do sistema.
               </span>
-              {syncResultado && syncResultado.sucesso && (
-                <span className={`block p-2 rounded-lg border ${
-                  syncResultado.destino === 'supabase'
-                    ? 'bg-white/70 border-emerald-300 text-emerald-900'
-                    : 'bg-stone-100 border-stone-300 text-stone-700'
-                }`}>
-                  {syncResultado.destino === 'supabase'
-                    ? '🗄️ Dados do município (alunos, orçamentos e exercício) gravados na tabela public.municipios do Supabase.'
-                    : '💾 Dados do município salvos localmente (modo demonstração). Configure SUPABASE_SERVICE_ROLE_KEY para gravar na tabela public.municipios.'}
-                </span>
-              )}
-              {syncResultado && !syncResultado.sucesso && (
-                <span className="block p-2 rounded-lg bg-red-50 border border-red-300 text-red-800">
-                  ⚠️ Falha ao gravar na tabela public.municipios: {syncResultado.erro}
-                </span>
-              )}
+              <span className="block p-2 rounded-lg border bg-white/70 border-emerald-300 text-emerald-900">
+                🗄️ Dados gravados na tabela public.municipios do Supabase via RLS (alunos, orçamentos, Órgão Gestor, contatos, gestor, portaria e logomarcas).
+              </span>
             </div>
           </div>
           <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">

@@ -33,7 +33,7 @@ export const CaeParecerConclusivo: React.FC = () => {
 
   const metaAFCumprida = prestacaoContas.percentualAgriculturaFamiliarAtingido >= 30;
   const vistoriasRealizadas = visitasCae.length > 0;
-  const cardapiosAprovados = cardapios.some(c => c.status === 'APROVADO');
+  const cardapiosAprovados = cardapios.some(c => ['Aprovado Nutricionista', 'Homologado CAE', 'Em Execução'].includes(c.status));
   const prestacaoPreenchida = prestacaoContas.recursoTotalFNDERecebido > 0;
 
   const todosRequisitosAtendidos = metaAFCumprida && vistoriasRealizadas && cardapiosAprovados && prestacaoPreenchida;

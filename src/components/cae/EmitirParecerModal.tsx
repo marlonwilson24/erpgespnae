@@ -8,7 +8,7 @@ interface EmitirParecerModalProps {
 }
 
 export const EmitirParecerModal: React.FC<EmitirParecerModalProps> = ({ onClose }) => {
-  const { emitirParecerCae, municipio, prestacaoContas, currentUser } = usePNAE();
+  const { emitirParecerCAE, municipio, prestacaoContas, currentUser } = usePNAE();
 
   const [numeroAta, setNumeroAta] = useState(`Ata nº 0${Math.floor(Math.random() * 5) + 3}/2026 - Reunião Ordinária CAE`);
   const [dataReuniao, setDataReuniao] = useState(new Date().toISOString().split('T')[0]);
@@ -20,19 +20,25 @@ export const EmitirParecerModal: React.FC<EmitirParecerModalProps> = ({ onClose 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    emitirParecerCae({
+    const resultadoParecer: 'Favorável sem Ressalvas' | 'Favorável com Ressalvas' | 'Desfavorável (Irregularidades)' =
+      statusAprovacao === 'Aprovado pelo CAE'
+        ? 'Favorável sem Ressalvas'
+        : statusAprovacao === 'Aprovado com Ressalvas'
+        ? 'Favorável com Ressalvas'
+        : 'Desfavorável (Irregularidades)';
+
+    emitirParecerCAE({
       prestacaoContasId: prestacaoContas.id,
       anoExercicio: municipio.anoExercicio,
       numeroAta,
       dataReuniaoAta: dataReuniao,
       presidenteCaeNome: presidenteNome,
       relatorCaeNome: relatorNome,
-      statusAprovacao,
-      percentualAgriFamiliarValidado: prestacaoContas.percentualAgriculturaFamiliarAtingido,
-      metaCumprida: prestacaoContas.percentualAgriculturaFamiliarAtingido >= 30,
+      resultadoParecer,
       textoParecerConclusivo: textoParecer,
-      aprovadoUnanimidade: true,
-      arquivoAtaNome: `Ata_CAE_${municipio.anoExercicio}_Conclusiva.pdf`,
+      recomendacoesAoGestor: '',
+      membrosPresentes: [presidenteNome, relatorNome],
+      pontosAvaliados: [],
     });
 
     onClose();

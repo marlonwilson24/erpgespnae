@@ -1,14 +1,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
 export function getServiceClient(): SupabaseClient | null {
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;
-  return createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_JWT_SECRET;
+  if (!url || !key) return null;
+  return createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
+
 
 export interface FalhaAutorizacao {
   status: number;

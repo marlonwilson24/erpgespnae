@@ -361,6 +361,7 @@ export interface AlertaPNAE {
   fornecedorNome?: string;
   alimentoId?: string;
   alimentoNome?: string;
+  estoqueId?: string;
   diasRestantes?: number;
   dataLimite?: string;
   acaoTexto?: string;

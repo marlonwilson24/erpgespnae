@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { UserProfile, UserRole } from '../types';
-import { mockUsers } from '../data/mockData';
 
 interface PerfilSupabaseRow {
   id: string;
@@ -74,15 +73,8 @@ function mapearPerfil(row: PerfilSupabaseRow): UserProfile {
   };
 }
 
-function perfilFallbackPorEmail(email: string): UserProfile | null {
-  const mock = mockUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-  return mock ? { ...mock } : null;
-}
-
 /**
  * Carrega o perfil do usuário autenticado na tabela public.perfis_usuarios.
- * Se a tabela não existir ou o usuário não tiver registro, aplica fallback:
- * primeiro os usuários de demonstração (por e-mail) e por fim um perfil básico.
  */
 export async function carregarPerfil(usuarioId: string, email: string): Promise<UserProfile> {
   try {
@@ -96,19 +88,17 @@ export async function carregarPerfil(usuarioId: string, email: string): Promise<
       return mapearPerfil(data as PerfilSupabaseRow);
     }
   } catch {
-    /* tabela inexistente ou sem permissão — segue para fallback */
+    /* tabela inexistente ou sem permissão */
   }
 
-  return (
-    perfilFallbackPorEmail(email) ?? {
-      id: usuarioId,
-      name: email.split('@')[0] || 'Usuário',
-      email,
-      role: 'ADMIN',
-      cpf: '000.000.000-00',
-      cargo: 'Perfil não vinculado',
-    }
-  );
+  return {
+    id: usuarioId,
+    name: email.split('@')[0] || 'Usuário',
+    email,
+    role: 'ESCOLA',
+    cpf: '000.000.000-00',
+    cargo: 'Perfil não vinculado',
+  };
 }
 
 export async function encerrarSessao(): Promise<void> {

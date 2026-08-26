@@ -13,7 +13,6 @@ import {
   CheckCircle2, 
   Info, 
   ArrowRight,
-  Sparkles,
   Clock,
   Radio,
   Calendar,
@@ -30,7 +29,6 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onClose 
     markAlertaLido, 
     markAllAlertasLidos, 
     removerAlerta, 
-    triggerSimulacaoNotificacao,
     somHabilitado,
     toggleSomNotificacao,
     setActiveTab,
@@ -38,7 +36,6 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onClose 
   } = usePNAE();
 
   const [filtroCategoria, setFiltroCategoria] = useState<'todas' | 'entrega_af' | 'validade_estoque' | 'nao_lidas'>('todas');
-  const [showSimulador, setShowSimulador] = useState(false);
 
   const unreadAlerts = alertas.filter(a => !a.lido);
   const entregaAlerts = alertas.filter(a => a.categoria === 'entrega_af');
@@ -161,65 +158,6 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onClose 
             <CheckCheck className="w-3.5 h-3.5" />
             <span>Ler todas</span>
           </button>
-        )}
-      </div>
-
-      {/* Painel do Simulador de Eventos em Tempo Real */}
-      <div className="bg-stone-100/70 p-3 border-b border-stone-200">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold text-stone-600 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            Simulador de Eventos em Tempo Real:
-          </span>
-          <button
-            onClick={() => setShowSimulador(!showSimulador)}
-            className="text-[10px] text-stone-500 hover:text-stone-900 underline font-medium"
-          >
-            {showSimulador ? 'Ocultar' : 'Exibir Testes'}
-          </button>
-        </div>
-
-        {showSimulador && (
-          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              onClick={() => triggerSimulacaoNotificacao('entrega_chegando')}
-              className="p-2 rounded-xl bg-white hover:bg-emerald-50 border border-stone-200 hover:border-emerald-300 text-left transition shadow-xs group"
-            >
-              <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[11px]">
-                <Truck className="w-3.5 h-3.5" />
-                <span>Entrega AF Chegando</span>
-              </div>
-              <p className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
-                Simula caminhão da agricultura familiar chegando na escola.
-              </p>
-            </button>
-
-            <button
-              onClick={() => triggerSimulacaoNotificacao('validade_urgente')}
-              className="p-2 rounded-xl bg-white hover:bg-amber-50 border border-stone-200 hover:border-amber-300 text-left transition shadow-xs group"
-            >
-              <div className="flex items-center gap-1.5 text-amber-700 font-bold text-[11px]">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Validade Próxima</span>
-              </div>
-              <p className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
-                Alerta de bananas e hortifrúti vencendo em 2 dias.
-              </p>
-            </button>
-
-            <button
-              onClick={() => triggerSimulacaoNotificacao('estoque_critico')}
-              className="p-2 rounded-xl bg-white hover:bg-red-50 border border-stone-200 hover:border-red-300 text-left transition shadow-xs group"
-            >
-              <div className="flex items-center gap-1.5 text-red-700 font-bold text-[11px]">
-                <Package className="w-3.5 h-3.5" />
-                <span>Estoque Crítico</span>
-              </div>
-              <p className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
-                Avisa que o feijão atingiu o nível mínimo na despensa.
-              </p>
-            </button>
-          </div>
         )}
       </div>
 

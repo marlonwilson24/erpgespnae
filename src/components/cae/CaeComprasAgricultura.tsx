@@ -34,27 +34,36 @@ export const CaeComprasAgricultura: React.FC = () => {
   const atingidoPercentual = prestacaoContas.percentualAgriculturaFamiliarAtingido;
   const metaCumprida = atingidoPercentual >= metaLegalPercentual;
 
+  // Contrato oriundo da Agricultura Familiar quando possui CAF/DAP vinculado
+  const isAF = (c: (typeof contratos)[number]) => !!c.fornecedorDapCaf;
+  const valorExecutadoContrato = (c: (typeof contratos)[number]) =>
+    autorizacoesFornecimento
+      .filter(af => af.contratoId === c.id)
+      .reduce((acc, af) => acc + af.valorTotalAF, 0);
+  const numeroChamadaContrato = (c: (typeof contratos)[number]) =>
+    chamadasPublicas.find(cp => cp.id === c.chamadaPublicaId)?.numeroEdital || 'Edital PNAE';
+
   // Filtrar contratos
   const contratosFiltrados = contratos.filter(c => {
-    if (filtroTipo === 'AGRICULTURA_FAMILIAR') return c.tipoFornecedor === 'AGRICULTURA_FAMILIAR';
-    if (filtroTipo === 'CONVENCIONAL') return c.tipoFornecedor === 'EMPRESA_CONVENCIONAL';
+    if (filtroTipo === 'AGRICULTURA_FAMILIAR') return isAF(c);
+    if (filtroTipo === 'CONVENCIONAL') return !isAF(c);
     return true;
   });
 
   const totalContratadoAF = contratos
-    .filter(c => c.tipoFornecedor === 'AGRICULTURA_FAMILIAR')
+    .filter(isAF)
     .reduce((acc, c) => acc + c.valorTotalContrato, 0);
 
   const totalExecutadoAF = contratos
-    .filter(c => c.tipoFornecedor === 'AGRICULTURA_FAMILIAR')
-    .reduce((acc, c) => acc + c.valorExecutado, 0);
+    .filter(isAF)
+    .reduce((acc, c) => acc + valorExecutadoContrato(c), 0);
 
   const produtoresUnicosAF = new Set(
-    contratos.filter(c => c.tipoFornecedor === 'AGRICULTURA_FAMILIAR').map(c => c.fornecedorNome)
+    contratos.filter(isAF).map(c => c.fornecedorNome)
   ).size;
 
   const handleExportRelatorio = () => {
-    exportPrestacaoContasPDF(prestacaoContas, municipio, contratos);
+    exportPrestacaoContasPDF(prestacaoContas, municipio);
   };
 
   return (
@@ -210,7 +219,7 @@ export const CaeComprasAgricultura: React.FC = () => {
                   : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
               }`}
             >
-              Agricultura Familiar ({contratos.filter(c => c.tipoFornecedor === 'AGRICULTURA_FAMILIAR').length})
+              Agricultura Familiar ({contratos.filter(isAF).length})
             </button>
             <button
               onClick={() => setFiltroTipo('CONVENCIONAL')}
@@ -220,7 +229,7 @@ export const CaeComprasAgricultura: React.FC = () => {
                   : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
               }`}
             >
-              Convencional ({contratos.filter(c => c.tipoFornecedor === 'EMPRESA_CONVENCIONAL').length})
+              Convencional ({contratos.filter(c => !isAF(c)).length})
             </button>
           </div>
         </div>
@@ -241,9 +250,9 @@ export const CaeComprasAgricultura: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-stone-100">
               {contratosFiltrados.map((contrato) => {
-                const isAF = contrato.tipoFornecedor === 'AGRICULTURA_FAMILIAR';
+                const ehAF = isAF(contrato);
                 const percentExec = contrato.valorTotalContrato > 0 
-                  ? ((contrato.valorExecutado / contrato.valorTotalContrato) * 100).toFixed(0) 
+                  ? ((valorExecutadoContrato(contrato) / contrato.valorTotalContrato) * 100).toFixed(0) 
                   : '0';
 
                 return (
@@ -256,17 +265,17 @@ export const CaeComprasAgricultura: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                        isAF ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-800'
+                        ehAF ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-800'
                       }`}>
-                        {isAF ? <Tractor className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}
-                        {isAF ? 'Agricultura Familiar' : 'Convencional'}
+                        {ehAF ? <Tractor className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}
+                        {ehAF ? 'Agricultura Familiar' : 'Convencional'}
                       </span>
                       <span className="block text-[10px] text-stone-400 font-mono mt-0.5">
-                        {contrato.fornecedorDocumento}
+                        {contrato.fornecedorCpfCnpj}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-stone-600 font-mono">
-                      {contrato.chamadaPublicaNumero || 'Edital PNAE'}
+                      {numeroChamadaContrato(contrato)}
                     </td>
                     <td className="py-3.5 px-4 text-stone-600">
                       {formatDate(contrato.dataInicio)} até {formatDate(contrato.dataFim)}
@@ -276,7 +285,7 @@ export const CaeComprasAgricultura: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <span className="font-bold text-stone-900 block">
-                        {formatCurrency(contrato.valorExecutado)}
+                        {formatCurrency(valorExecutadoContrato(contrato))}
                       </span>
                       <span className="text-[10px] text-stone-500">
                         {percentExec}% entregue

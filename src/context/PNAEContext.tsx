@@ -24,36 +24,50 @@ import {
   ReuniaoCAE,
   ApontamentoOuvidoriaCAE,
 } from '../types';
-import {
-  mockMunicipio,
-  mockUsers,
-  mockEscolas,
-  mockAlimentos,
-  mockCardapios,
-  mockChamadasPublicas,
-  mockContratos,
-  mockAutorizacoesFornecimento,
-  mockEntregas,
-  mockEstoqueEscola,
-  mockPrestacaoContas,
-  mockParecerCAE,
-  mockAuditoriaLogs,
-  mockAlertas,
-  mockVisitasCAE,
-  mockMembrosCAE,
-  mockReunioesCAE,
-  mockApontamentosCAE,
-} from '../data/mockData';
-import { soundManager } from '../lib/notificationSound';
-import { supabase } from '../lib/supabase';
-import {
-  entrarComSenha,
-  carregarPerfil,
-  encerrarSessao,
-} from '../lib/auth';
 import confetti from 'canvas-confetti';
 
+// Sub-contextos extraídos
+import { AuthProvider, useAuth } from './AuthContext';
+import { UIProvider, useUI } from './UIContext';
+
+// Serviços de negócio do Supabase
+import { buscarAlimentos, salvarAlimento } from '../lib/services/alimentosService';
+import { buscarEscolas, salvarEscola } from '../lib/services/escolasService';
+import { buscarCardapios, criarCardapio, atualizarStatusCardapio } from '../lib/services/cardapiosService';
+import { buscarChamadasPublicas, criarChamadaPublica, submeterProposta } from '../lib/services/chamadasService';
+import {
+  buscarContratos,
+  buscarAFs,
+  emitirAF as emitirAFService,
+  buscarEntregas,
+  confirmarEntrega as confirmarEntregaService,
+  buscarEstoque,
+  darBaixaEstoque as darBaixaEstoqueService,
+  consumirEstoquePorAlimento as consumirEstoquePorAlimentoService,
+} from '../lib/services/entregasEstoqueService';
+import {
+  buscarPrestacaoContas,
+  buscarPareceresCAE,
+  emitirParecerCAE as emitirParecerCAEService,
+  buscarAuditoriaLogs,
+  salvarAuditoriaLog,
+} from '../lib/services/prestacaoAuditoriaService';
+import { buscarMunicipio, salvarMunicipio } from '../lib/services/municipiosService';
+import {
+  buscarVisitasCAE,
+  registrarVisitaCAE as registrarVisitaCAEService,
+  buscarMembrosCAE,
+  salvarMembroCAE as salvarMembroCAEService,
+  atualizarMembroCAE as atualizarMembroCAEService,
+  buscarReunioesCAE,
+  agendarReuniaoCAE as agendarReuniaoCAEService,
+  buscarApontamentosCAE,
+  registrarApontamentoCAE as registrarApontamentoCAEService,
+  responderApontamentoCAE as responderApontamentoCAEService,
+} from '../lib/services/caeService';
+
 interface ConfirmarEntregaInput {
+
   autorizacaoFornecimentoId: string;
   numeroAF: string;
   fornecedorId: string;
@@ -79,11 +93,28 @@ interface ConfirmarEntregaInput {
   termoRecebimentoAssinado?: boolean;
 }
 
+/** Interface pública do usePNAE() — mantida idêntica para retrocompatibilidade */
 interface PNAEContextType {
+  // --- Auth (delegado ao AuthContext) ---
   currentUser: UserProfile | null;
   currentRole: UserRole;
   isAuthenticated: boolean;
   authChecking: boolean;
+  login: (email: string, senha: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  // --- UI (delegado ao UIContext) ---
+  alertas: AlertaPNAE[];
+  toasts: ToastNotificacao[];
+  somHabilitado: boolean;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  addAlerta: (alerta: Omit<AlertaPNAE, 'id' | 'data' | 'lido'> & { lido?: boolean; showToast?: boolean }) => void;
+  markAlertaLido: (id: string) => void;
+  markAllAlertasLidos: () => void;
+  removerAlerta: (id: string) => void;
+  dismissToast: (id: string) => void;
+  toggleSomNotificacao: () => void;
+  // --- Dados de negócio ---
   municipio: Municipio;
   escolas: Escola[];
   alimentos: Alimento[];
@@ -93,7 +124,7 @@ interface PNAEContextType {
   autorizacoesFornecimento: AutorizacaoFornecimento[];
   entregas: EntregaMercadoria[];
   estoqueEscola: EstoqueItemEscola[];
-  estoqueEscolas: EstoqueItemEscola[]; // Alias para compatibilidade
+  estoqueEscolas: EstoqueItemEscola[];
   prestacaoContas: PrestacaoContasPNAE;
   pareceresCae: ParecerCAE[];
   visitasCae: VisitaCAE[];
@@ -101,23 +132,14 @@ interface PNAEContextType {
   reunioesCae: ReuniaoCAE[];
   apontamentosCae: ApontamentoOuvidoriaCAE[];
   auditoriaLogs: AuditoriaLog[];
-  alertas: AlertaPNAE[];
-  toasts: ToastNotificacao[];
-  somHabilitado: boolean;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-  login: (email: string, senha: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
-  switchRole: (role: UserRole) => void;
+  addEscola: (escola: Omit<Escola, 'id'>) => void;
   addCardapio: (cardapio: Omit<Cardapio, 'id' | 'criadoEm'>) => void;
   updateCardapioStatus: (id: string, status: Cardapio['status']) => void;
   addAlimento: (alimento: Omit<Alimento, 'id'>) => void;
   createChamadaPublica: (chamada: Omit<ChamadaPublica, 'id' | 'propostas'>) => void;
   submitProposta: (proposta: Omit<PropostaFornecedor, 'id' | 'dataSubmissao'>) => { success: boolean; error?: string };
   emitirAF: (afData: Omit<AutorizacaoFornecimento, 'id' | 'numeroAF' | 'dataEmissao' | 'status'>) => void;
-  registrarRecebimentoEntrega: (
-    entrega: Omit<EntregaMercadoria, 'id' | 'termoRecebimentoGerado'>
-  ) => void;
+  registrarRecebimentoEntrega: (entrega: Omit<EntregaMercadoria, 'id' | 'termoRecebimentoGerado'>) => void;
   confirmarRecebimentoEntrega: (input: ConfirmarEntregaInput) => EntregaMercadoria;
   darBaixaEstoque: (estoqueId: string, quantidadeUtilizada: number) => void;
   consumirEstoque: (escolaId: string, alimentoId: string, quantidade: number, motivo?: string) => void;
@@ -129,209 +151,138 @@ interface PNAEContextType {
   registrarApontamentoOuvidoria: (apontamento: Omit<ApontamentoOuvidoriaCAE, 'id' | 'dataRegistro'>) => void;
   responderApontamentoOuvidoria: (id: string, resposta: string, status: ApontamentoOuvidoriaCAE['status']) => void;
   addAuditoriaLog: (acao: string, modulo: string, detalhes: string) => void;
-  addAlerta: (alerta: Omit<AlertaPNAE, 'id' | 'data' | 'lido'> & { lido?: boolean; showToast?: boolean }) => void;
-  markAlertaLido: (id: string) => void;
-  markAllAlertasLidos: () => void;
-  removerAlerta: (id: string) => void;
-  dismissToast: (id: string) => void;
-  toggleSomNotificacao: () => void;
-  triggerSimulacaoNotificacao: (tipo: 'entrega_chegando' | 'validade_urgente' | 'estoque_critico') => void;
   updateMunicipio: (updatedData: Partial<Municipio>) => void;
-  resetToMockData: () => void;
 }
 
+// PNAEContext agora é apenas o contexto de dados de negócio.
+// Auth → AuthContext | UI → UIContext
 const PNAEContext = createContext<PNAEContextType | undefined>(undefined);
 
-const STORAGE_KEY_PREFIX = 'pnae_erp_v2_';
+// Registros neutros enquanto o banco não carrega (sem dados fictícios)
+const MUNICIPIO_VAZIO: Municipio = {
+  id: '',
+  nome: '',
+  uf: '',
+  codigoIbge: '',
+  totalAlunosPNAE: 0,
+  orcamentoAnualFNDE: 0,
+  orcamentoContrapartida: 0,
+  anoExercicio: new Date().getFullYear(),
+};
 
-export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Autenticação real via Supabase: a sessão é a fonte da verdade.
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [authChecking, setAuthChecking] = useState<boolean>(true);
+const PRESTACAO_CONTAS_VAZIA: PrestacaoContasPNAE = {
+  id: '',
+  anoExercicio: new Date().getFullYear(),
+  municipioId: '',
+  municipioNome: '',
+  recursoTotalFNDERecebido: 0,
+  contrapartidaMunicipalGasta: 0,
+  gastoTotalAlimentacao: 0,
+  gastoAgriculturaFamiliar: 0,
+  percentualAgriculturaFamiliarAtingido: 0,
+  cumpreMetaLegal30Porcento: false,
+  saldoContabilRemanescente: 0,
+  numeroAlunosAtendidos: 0,
+  numeroRefeicoesServidasAno: 0,
+  statusAprovacao: 'Pendente Análise',
+};
 
-  // Restaura sessão existente e escuta mudanças de autenticação
+// ---------------------------------------------------------------------------
+// PNAEBusinessProvider — lógica de negócio pura (dados do Supabase)
+// ---------------------------------------------------------------------------
+const PNAEBusinessProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, login: authLogin, logout: authLogout, authChecking } = useAuth();
+  const ui = useUI();
+
+  const [municipio, setMunicipio] = useState<Municipio>(MUNICIPIO_VAZIO);
+  const [escolas, setEscolas] = useState<Escola[]>([]);
+  const [alimentos, setAlimentos] = useState<Alimento[]>([]);
+  const [cardapios, setCardapios] = useState<Cardapio[]>([]);
+  const [chamadasPublicas, setChamadasPublicas] = useState<ChamadaPublica[]>([]);
+  const [contratos, setContratos] = useState<ContratoFornecedor[]>([]);
+  const [autorizacoesFornecimento, setAutorizacoesFornecimento] = useState<AutorizacaoFornecimento[]>([]);
+  const [entregas, setEntregas] = useState<EntregaMercadoria[]>([]);
+  const [estoqueEscola, setEstoqueEscola] = useState<EstoqueItemEscola[]>([]);
+  const [prestacaoContas, setPrestacaoContas] = useState<PrestacaoContasPNAE>(PRESTACAO_CONTAS_VAZIA);
+  const [pareceresCae, setPareceresCae] = useState<ParecerCAE[]>([]);
+  const [visitasCae, setVisitasCae] = useState<VisitaCAE[]>([]);
+  const [membrosCae, setMembrosCae] = useState<MembroCAE[]>([]);
+  const [reunioesCae, setReunioesCae] = useState<ReuniaoCAE[]>([]);
+  const [apontamentosCae, setApontamentosCae] = useState<ApontamentoOuvidoriaCAE[]>([]);
+  const [auditoriaLogs, setAuditoriaLogs] = useState<AuditoriaLog[]>([]);
+
+  // Carregamento primário e direto do Supabase para todos os módulos de negócio
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    (async () => {
+    async function carregarDadosSupabase() {
       try {
-        const { data } = await supabase.auth.getSession();
-        const sessionUser = data.session?.user;
-        if (sessionUser) {
-          const perfil = await carregarPerfil(sessionUser.id, sessionUser.email ?? '');
-          if (mounted && perfil) setCurrentUser(perfil);
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        if (mounted) setAuthChecking(false);
-      }
-    })();
+        const [
+          munData,
+          alimData,
+          escData,
+          cardData,
+          cpData,
+          contData,
+          afData,
+          entData,
+          estData,
+          pcData,
+          parData,
+          logData,
+          visData,
+          memData,
+          reunData,
+          ouvData,
+        ] = await Promise.all([
+          buscarMunicipio(),
+          buscarAlimentos(),
+          buscarEscolas(),
+          buscarCardapios(),
+          buscarChamadasPublicas(),
+          buscarContratos(),
+          buscarAFs(),
+          buscarEntregas(),
+          buscarEstoque(),
+          buscarPrestacaoContas(),
+          buscarPareceresCAE(),
+          buscarAuditoriaLogs(),
+          buscarVisitasCAE(),
+          buscarMembrosCAE(),
+          buscarReunioesCAE(),
+          buscarApontamentosCAE(),
+        ]);
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+        if (!isMounted) return;
 
-      if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setAuthChecking(false);
-        return;
+        if (munData) setMunicipio(munData);
+        if (alimData.length > 0) setAlimentos(alimData);
+        if (escData.length > 0) setEscolas(escData);
+        if (cardData.length > 0) setCardapios(cardData);
+        if (cpData.length > 0) setChamadasPublicas(cpData);
+        if (contData.length > 0) setContratos(contData);
+        if (afData.length > 0) setAutorizacoesFornecimento(afData);
+        if (entData.length > 0) setEntregas(entData);
+        if (estData.length > 0) setEstoqueEscola(estData);
+        if (pcData) setPrestacaoContas(pcData);
+        if (parData.length > 0) setPareceresCae(parData);
+        if (logData.length > 0) setAuditoriaLogs(logData);
+        if (visData.length > 0) setVisitasCae(visData);
+        if (memData.length > 0) setMembrosCae(memData);
+        if (reunData.length > 0) setReunioesCae(reunData);
+        if (ouvData.length > 0) setApontamentosCae(ouvData);
+      } catch (err) {
+        console.error('[PNAEContext] Falha ao carregar dados do Supabase:', err);
       }
+    }
 
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
-        const perfil = await carregarPerfil(session.user.id, session.user.email ?? '');
-        if (mounted && perfil) setCurrentUser(perfil);
-        setAuthChecking(false);
-      }
-    });
+    carregarDadosSupabase();
 
     return () => {
-      mounted = false;
-      listener.subscription.unsubscribe();
+      isMounted = false;
     };
   }, []);
 
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
-
-  const [municipio, setMunicipio] = useState<Municipio>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'municipio');
-    return saved ? JSON.parse(saved) : mockMunicipio;
-  });
-
-  const [escolas, setEscolas] = useState<Escola[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'escolas');
-    return saved ? JSON.parse(saved) : mockEscolas;
-  });
-
-  const [alimentos, setAlimentos] = useState<Alimento[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'alimentos');
-    return saved ? JSON.parse(saved) : mockAlimentos;
-  });
-
-  const [cardapios, setCardapios] = useState<Cardapio[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'cardapios');
-    return saved ? JSON.parse(saved) : mockCardapios;
-  });
-
-  const [chamadasPublicas, setChamadasPublicas] = useState<ChamadaPublica[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'chamadasPublicas');
-    return saved ? JSON.parse(saved) : mockChamadasPublicas;
-  });
-
-  const [contratos, setContratos] = useState<ContratoFornecedor[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'contratos');
-    return saved ? JSON.parse(saved) : mockContratos;
-  });
-
-  const [autorizacoesFornecimento, setAutorizacoesFornecimento] = useState<AutorizacaoFornecimento[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'autorizacoesFornecimento');
-    return saved ? JSON.parse(saved) : mockAutorizacoesFornecimento;
-  });
-
-  const [entregas, setEntregas] = useState<EntregaMercadoria[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'entregas');
-    return saved ? JSON.parse(saved) : mockEntregas;
-  });
-
-  const [estoqueEscola, setEstoqueEscola] = useState<EstoqueItemEscola[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'estoqueEscola');
-    return saved ? JSON.parse(saved) : mockEstoqueEscola;
-  });
-
-  const [prestacaoContas, setPrestacaoContas] = useState<PrestacaoContasPNAE>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'prestacaoContas');
-    return saved ? JSON.parse(saved) : mockPrestacaoContas;
-  });
-
-  const [pareceresCae, setPareceresCae] = useState<ParecerCAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'pareceresCae');
-    return saved ? JSON.parse(saved) : [mockParecerCAE];
-  });
-
-  const [visitasCae, setVisitasCae] = useState<VisitaCAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'visitasCae');
-    return saved ? JSON.parse(saved) : mockVisitasCAE;
-  });
-
-  const [membrosCae, setMembrosCae] = useState<MembroCAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'membrosCae');
-    return saved ? JSON.parse(saved) : mockMembrosCAE;
-  });
-
-  const [reunioesCae, setReunioesCae] = useState<ReuniaoCAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'reunioesCae');
-    return saved ? JSON.parse(saved) : mockReunioesCAE;
-  });
-
-  const [apontamentosCae, setApontamentosCae] = useState<ApontamentoOuvidoriaCAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'apontamentosCae');
-    return saved ? JSON.parse(saved) : mockApontamentosCAE;
-  });
-
-  const [auditoriaLogs, setAuditoriaLogs] = useState<AuditoriaLog[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'auditoriaLogs');
-    return saved ? JSON.parse(saved) : mockAuditoriaLogs;
-  });
-
-  const [alertas, setAlertas] = useState<AlertaPNAE[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'alertas');
-    return saved ? JSON.parse(saved) : mockAlertas;
-  });
-
-  const [toasts, setToasts] = useState<ToastNotificacao[]>([]);
-  const [somHabilitado, setSomHabilitado] = useState<boolean>(() => !soundManager.getIsMuted());
-
-  // Salvar no LocalStorage sempre que houver modificações
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'cardapios', JSON.stringify(cardapios));
-  }, [cardapios]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'chamadasPublicas', JSON.stringify(chamadasPublicas));
-  }, [chamadasPublicas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'autorizacoesFornecimento', JSON.stringify(autorizacoesFornecimento));
-  }, [autorizacoesFornecimento]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'entregas', JSON.stringify(entregas));
-  }, [entregas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'estoqueEscola', JSON.stringify(estoqueEscola));
-  }, [estoqueEscola]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'prestacaoContas', JSON.stringify(prestacaoContas));
-  }, [prestacaoContas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'pareceresCae', JSON.stringify(pareceresCae));
-  }, [pareceresCae]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'alertas', JSON.stringify(alertas));
-  }, [alertas]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'visitasCae', JSON.stringify(visitasCae));
-  }, [visitasCae]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'membrosCae', JSON.stringify(membrosCae));
-  }, [membrosCae]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'reunioesCae', JSON.stringify(reunioesCae));
-  }, [reunioesCae]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'apontamentosCae', JSON.stringify(apontamentosCae));
-  }, [apontamentosCae]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'municipio', JSON.stringify(municipio));
-  }, [municipio]);
 
   const addAuditoriaLog = useCallback((acao: string, modulo: string, detalhes: string) => {
     const newLog: AuditoriaLog = {
@@ -344,374 +295,126 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
       detalhes,
     };
     setAuditoriaLogs(prev => [newLog, ...prev]);
+    salvarAuditoriaLog(acao, modulo, detalhes, currentUser?.name, currentUser?.role).catch(() => {});
   }, [currentUser]);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
+  // Alias de conveniência para ui.addAlerta (reduz verbosidade no código de negócio)
+  const addAlerta = ui.addAlerta;
 
-  const addAlerta = useCallback((
-    alertaData: Omit<AlertaPNAE, 'id' | 'data' | 'lido'> & { lido?: boolean; showToast?: boolean }
-  ) => {
-    const newId = `al-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const novoAlerta: AlertaPNAE = {
-      ...alertaData,
-      id: newId,
-      data: 'Agora',
-      lido: alertaData.lido || false,
-      criadoEm: new Date().toISOString(),
-    };
 
-    setAlertas(prev => [novoAlerta, ...prev]);
-
-    // Disparar Som & Toast em tempo real
-    if (alertaData.showToast !== false) {
-      if (alertaData.tipo === 'perigo') {
-        soundManager.playDanger();
-      } else if (alertaData.tipo === 'alerta') {
-        soundManager.playWarning();
-      } else {
-        soundManager.playChime();
-      }
-
-      const novoToast: ToastNotificacao = {
-        id: newId,
-        tipo: alertaData.tipo,
-        titulo: alertaData.titulo,
-        mensagem: alertaData.mensagem,
-        categoria: alertaData.categoria,
-        acaoTexto: alertaData.acaoTexto,
-        acaoTab: alertaData.acaoTab,
-        afId: alertaData.afId,
-        escolaId: alertaData.escolaId,
-        duracaoMs: 6500,
-      };
-
-      setToasts(prev => [novoToast, ...prev.slice(0, 4)]);
-    }
-  }, []);
-
-  const markAlertaLido = useCallback((id: string) => {
-    setAlertas(prev => prev.map(a => (a.id === id ? { ...a, lido: true } : a)));
-  }, []);
-
-  const markAllAlertasLidos = useCallback(() => {
-    setAlertas(prev => prev.map(a => ({ ...a, lido: true })));
-  }, []);
-
-  const removerAlerta = useCallback((id: string) => {
-    setAlertas(prev => prev.filter(a => a.id !== id));
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
-  const toggleSomNotificacao = useCallback(() => {
-    setSomHabilitado(prev => {
-      const next = !prev;
-      soundManager.setMuted(!next);
-      if (next) soundManager.playChime();
-      return next;
-    });
-  }, []);
-
-  // Monitoramento dinâmico e contínuo de Prazos de Entrega de AF e Validade de Estoque
-  const verificarAlertasAutomaticos = useCallback(() => {
-    const hoje = new Date();
-    const hojeStr = hoje.toISOString().split('T')[0];
-
-    // 1. Monitorar Prazos de Entrega de Agricultura Familiar (AFs)
-    autorizacoesFornecimento.forEach(af => {
-      if (af.status === 'Em Trânsito' || af.status === 'Emitida') {
-        const prazo = new Date(af.dataLimiteEntrega);
-        const diffDias = Math.ceil((prazo.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-
-        const alertExiste = alertas.some(
-          a => a.afId === af.id && (a.categoria === 'entrega_af')
-        );
-
-        if (!alertExiste) {
-          if (diffDias < 0) {
-            // Entrega atrasada
-            addAlerta({
-              tipo: 'perigo',
-              categoria: 'entrega_af',
-              prioridade: 'alta',
-              titulo: `🚨 Entrega em Atraso: ${af.numeroAF}`,
-              mensagem: `A entrega de hortifrúti da AF ${af.numeroAF} (${af.fornecedorNome}) para a escola ${af.escolaNome} expirou o prazo em ${af.dataLimiteEntrega}.`,
-              afId: af.id,
-              numeroAF: af.numeroAF,
-              escolaId: af.escolaId,
-              escolaNome: af.escolaNome,
-              fornecedorNome: af.fornecedorNome,
-              dataLimite: af.dataLimiteEntrega,
-              acaoTexto: 'Conferir e Receber',
-              acaoTab: 'dashboard',
-              linkModulo: 'entregas',
-              showToast: false,
-            });
-          } else if (diffDias <= 2) {
-            // Entrega hoje ou nos próximos 2 dias
-            addAlerta({
-              tipo: 'alerta',
-              categoria: 'entrega_af',
-              prioridade: 'alta',
-              titulo: diffDias === 0 ? `📦 Entrega de Agricultura Familiar HOJE: ${af.numeroAF}` : `⏳ Prazo de Entrega Próximo: ${af.numeroAF}`,
-              mensagem: `A AF ${af.numeroAF} de ${af.fornecedorNome} (${af.itens.length} itens) tem previsão de chegada em ${af.escolaNome} até ${af.dataLimiteEntrega}.`,
-              afId: af.id,
-              numeroAF: af.numeroAF,
-              escolaId: af.escolaId,
-              escolaNome: af.escolaNome,
-              fornecedorNome: af.fornecedorNome,
-              dataLimite: af.dataLimiteEntrega,
-              diasRestantes: diffDias,
-              acaoTexto: 'Ver Autorização de Fornecimento',
-              acaoTab: 'dashboard',
-              linkModulo: 'entregas',
-              showToast: false,
-            });
-          }
-        }
-      }
-    });
-
-    // 2. Monitorar Validade de Alimentos e Níveis Críticos de Estoque na Despensa
-    estoqueEscola.forEach(item => {
-      const validade = new Date(item.dataValidadeProxima);
-      const diffDiasValidade = Math.ceil((validade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-      
-      const alertValidadeExiste = alertas.some(
-        a => a.estoqueId === item.id && a.categoria === 'validade_estoque'
-      );
-
-      if (!alertValidadeExiste) {
-        if (diffDiasValidade <= 0) {
-          // Vencido
-          addAlerta({
-            tipo: 'perigo',
-            categoria: 'validade_estoque',
-            prioridade: 'alta',
-            titulo: `⚠️ Alimento Vencido na Despensa: ${item.alimentoNome}`,
-            mensagem: `O lote ${item.lote} de ${item.alimentoNome} (${item.quantidadeAtual} ${item.unidadeMedida}) venceu em ${item.dataValidadeProxima}. Realize o descarte ou verificação imediata.`,
-            estoqueId: item.id,
-            alimentoId: item.alimentoId,
-            alimentoNome: item.alimentoNome,
-            escolaId: item.escolaId,
-            diasRestantes: diffDiasValidade,
-            acaoTexto: 'Acessar Despensa',
-            acaoTab: 'estoque-escola',
-            linkModulo: 'estoque',
-            showToast: false,
-          });
-        } else if (diffDiasValidade <= 5) {
-          // Vence em até 5 dias
-          addAlerta({
-            tipo: 'alerta',
-            categoria: 'validade_estoque',
-            prioridade: 'alta',
-            titulo: `⏱️ Validade Próxima: ${item.alimentoNome} (Vence em ${diffDiasValidade} dias)`,
-            mensagem: `Lote ${item.lote} de ${item.alimentoNome} (${item.quantidadeAtual} ${item.unidadeMedida}) tem validade em ${item.dataValidadeProxima}. Priorize o uso nos cardápios da semana!`,
-            estoqueId: item.id,
-            alimentoId: item.alimentoId,
-            alimentoNome: item.alimentoNome,
-            escolaId: item.escolaId,
-            diasRestantes: diffDiasValidade,
-            acaoTexto: 'Ver Estoque da Escola',
-            acaoTab: 'estoque-escola',
-            linkModulo: 'estoque',
-            showToast: false,
-          });
-        }
-      }
-
-      // Estoque Baixo / Nível de Segurança
-      const alertEstoqueBaixoExiste = alertas.some(
-        a => a.estoqueId === item.id && a.categoria === 'estoque_baixo'
-      );
-
-      if (!alertEstoqueBaixoExiste && item.quantidadeAtual <= item.quantidadeMinimaAlerta && item.quantidadeAtual > 0) {
-        addAlerta({
-          tipo: 'alerta',
-          categoria: 'estoque_baixo',
-          prioridade: 'media',
-          titulo: `📉 Estoque Baixo: ${item.alimentoNome}`,
-          mensagem: `Restam apenas ${item.quantidadeAtual} ${item.unidadeMedida} na despensa (limite mínimo de segurança: ${item.quantidadeMinimaAlerta} ${item.unidadeMedida}).`,
-          estoqueId: item.id,
-          alimentoId: item.alimentoId,
-          alimentoNome: item.alimentoNome,
-          escolaId: item.escolaId,
-          acaoTexto: 'Ver Despensa',
-          acaoTab: 'estoque-escola',
-          linkModulo: 'estoque',
-          showToast: false,
-        });
-      }
-    });
-  }, [autorizacoesFornecimento, estoqueEscola, alertas, addAlerta]);
-
-  // Executar checagem inicial
+  // Disparar verificação de alertas automáticos via UIContext após carregar dados
   useEffect(() => {
-    verificarAlertasAutomaticos();
-  }, [verificarAlertasAutomaticos]);
-
-  // Simulação interativa em tempo real de eventos do PNAE
-  const triggerSimulacaoNotificacao = useCallback((tipo: 'entrega_chegando' | 'validade_urgente' | 'estoque_critico') => {
-    if (tipo === 'entrega_chegando') {
-      const afAlvo = autorizacoesFornecimento[0] || mockAutorizacoesFornecimento[0];
-      addAlerta({
-        tipo: 'alerta',
-        categoria: 'entrega_af',
-        prioridade: 'alta',
-        titulo: '🚚 Entrega da Agricultura Familiar a Caminho!',
-        mensagem: `O produtor rural ${afAlvo.fornecedorNome} está a caminho da ${afAlvo.escolaNome} com a entrega da ${afAlvo.numeroAF} (hortifrúti orgânico fresco). Prepare a equipe da cozinha para conferência.`,
-        afId: afAlvo.id,
-        numeroAF: afAlvo.numeroAF,
-        escolaId: afAlvo.escolaId,
-        escolaNome: afAlvo.escolaNome,
-        fornecedorNome: afAlvo.fornecedorNome,
-        dataLimite: afAlvo.dataLimiteEntrega,
-        acaoTexto: 'Conferir Recebimento',
-        acaoTab: 'dashboard',
-        linkModulo: 'entregas',
-        showToast: true,
-      });
-      addAuditoriaLog('Alerta em Tempo Real', 'Entregas & AF', `Disparada notificação em tempo real de entrega a caminho da AF ${afAlvo.numeroAF}`);
-    } else if (tipo === 'validade_urgente') {
-      addAlerta({
-        tipo: 'perigo',
-        categoria: 'validade_estoque',
-        prioridade: 'alta',
-        titulo: '⚠️ Alerta Crítico: Hortifrúti Próximo ao Vencimento',
-        mensagem: 'Banana Prata Orgânica e Ovos Caipiras da Agricultura Familiar na EMEF Monteiro Lobato vencem em 2 dias. Inclua nas preparações de hoje para evitar desperdício de merenda.',
-        escolaId: 'esc-01',
-        alimentoNome: 'Banana Prata e Ovos Caipiras',
-        diasRestantes: 2,
-        acaoTexto: 'Ajustar Cardápio / Despensa',
-        acaoTab: 'estoque-escola',
-        linkModulo: 'estoque',
-        showToast: true,
-      });
-      addAuditoriaLog('Alerta em Tempo Real', 'Despensa Escolar', 'Notificação de validade urgente gerada para itens perecíveis');
-    } else if (tipo === 'estoque_critico') {
-      addAlerta({
-        tipo: 'alerta',
-        categoria: 'estoque_baixo',
-        prioridade: 'media',
-        titulo: '📉 Estoque Crítico de Feijão Preto e Leite',
-        mensagem: 'O saldo de Feijão Preto da Agricultura Familiar na despensa escolar atingiu 12 kg (abaixo da cota mínima de 30 kg). Solicite nova AF à Secretaria.',
-        escolaId: 'esc-01',
-        alimentoNome: 'Feijão Preto da Agricultura Familiar',
-        acaoTexto: 'Ver Estoque',
-        acaoTab: 'estoque-escola',
-        linkModulo: 'estoque',
-        showToast: true,
-      });
-      addAuditoriaLog('Alerta em Tempo Real', 'Despensa Escolar', 'Alerta de estoque mínimo atingido disparado');
+    if (autorizacoesFornecimento.length > 0 || estoqueEscola.length > 0) {
+      ui.verificarAlertasAutomaticos(autorizacoesFornecimento, estoqueEscola);
     }
-  }, [autorizacoesFornecimento, addAlerta, addAuditoriaLog]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autorizacoesFornecimento, estoqueEscola]);
 
-  const login = async (email: string, senha: string): Promise<{ success: boolean; error?: string }> => {
-    const resultado = await entrarComSenha(email.trim(), senha);
+  // login/logout delegados ao AuthContext
+  const login = useCallback(async (email: string, senha: string): Promise<{ success: boolean; error?: string }> => {
+    const resultado = await authLogin(email, senha);
     if (!resultado.success) {
-      addAuditoriaLog('Tentativa de Login Falha', 'Autenticação', `Falha de autenticação Supabase para ${email}: ${resultado.error}`);
+      addAuditoriaLog('Tentativa de Login Falha', 'Autenticação', `Falha de autenticação para ${email}: ${resultado.error}`);
       return resultado;
     }
-
-    const { data } = await supabase.auth.getSession();
-    const sessionUser = data.session?.user;
-    const perfil = sessionUser
-      ? await carregarPerfil(sessionUser.id, sessionUser.email ?? email)
-      : null;
-
-    setCurrentUser(perfil);
-    setActiveTab('dashboard');
-    addAuditoriaLog('Login no Sistema', 'Autenticação', `Usuário ${perfil?.name || email} autenticado via Supabase Auth com perfil ${perfil?.role}`);
-
-    // Boas vindas com notificação suave
+    ui.setActiveTab('dashboard');
+    addAuditoriaLog('Login no Sistema', 'Autenticação', `Usuário autenticado via Supabase Auth`);
     addAlerta({
       tipo: 'info',
       categoria: 'sistema',
       prioridade: 'baixa',
-      titulo: `Bem-vindo(a), ${perfil?.name || email}`,
-      mensagem: `Sessão iniciada como ${perfil?.cargo || perfil?.role}. Sistema sincronizado com dados do PNAE ${municipio.nome}-${municipio.uf}.`,
+      titulo: `Bem-vindo(a) ao PNAE`,
+      mensagem: `Sessão iniciada. Sistema sincronizado com dados do PNAE ${municipio.nome}-${municipio.uf}.`,
       showToast: true,
     });
-
     return { success: true };
-  };
+  }, [authLogin, addAuditoriaLog, ui, addAlerta, municipio]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     if (currentUser) {
       addAuditoriaLog('Logout', 'Autenticação', `Usuário ${currentUser.name} encerrou a sessão.`);
     }
-    setCurrentUser(null);
-    localStorage.removeItem(STORAGE_KEY_PREFIX + 'currentUser');
-    await encerrarSessao();
-  };
+    await authLogout();
+  }, [currentUser, addAuditoriaLog, authLogout]);
 
-  const switchRole = (role: UserRole) => {
-    const targetUser = mockUsers.find(u => u.role === role);
-    if (targetUser) {
-      setCurrentUser(targetUser);
-      setActiveTab('dashboard');
-      addAuditoriaLog('Troca de Perfil Ativo', 'Controle de Acesso', `Perfil alternado para ${role} (${targetUser.name})`);
-      
-      if (role === 'ESCOLA') {
-        soundManager.playChime();
-        setToasts(prev => [
-          {
-            id: `toast-switch-${Date.now()}`,
-            tipo: 'info',
-            categoria: 'sistema',
-            titulo: 'Perfil Escola Ativo',
-            mensagem: `Você está gerenciando a ${targetUser.escolaId ? 'unidade escolar atribuída' : 'EMEF Monteiro Lobato'}. Notificações de entregas e estoque ativas.`,
-            duracaoMs: 5000,
-          },
-          ...prev,
-        ]);
+  const addEscola = async (escolaData: Omit<Escola, 'id'>) => {
+    try {
+      const salva = await salvarEscola({ ...escolaData, municipioId: municipio.id });
+      if (salva) {
+        setEscolas(prev => [...prev, salva]);
       }
+    } catch (e) {
+      console.error('Erro ao salvar escola no Supabase:', e);
     }
+    addAuditoriaLog('Cadastro de Escola', 'Unidades Escolares', `Nova escola cadastrada: ${escolaData.nome} (INEP ${escolaData.codigoInep})`);
   };
 
-  const addCardapio = (cardapioData: Omit<Cardapio, 'id' | 'criadoEm'>) => {
-    const newCardapio: Cardapio = {
-      ...cardapioData,
-      id: `card-${Date.now()}`,
-      criadoEm: new Date().toISOString().split('T')[0],
-    };
-    setCardapios(prev => [newCardapio, ...prev]);
-    addAuditoriaLog('Criação de Cardápio', 'Cardápios PNAE', `Novo cardápio criado: ${newCardapio.titulo} (${newCardapio.etapaEnsino})`);
+  const addCardapio = async (cardapioData: Omit<Cardapio, 'id' | 'criadoEm'>) => {
+    try {
+      const criado = await criarCardapio(cardapioData, municipio.id);
+      if (criado) {
+        setCardapios(prev => [criado, ...prev]);
+      }
+    } catch (e) {
+      console.error('Erro ao criar cardápio no Supabase:', e);
+      const newCardapio: Cardapio = {
+        ...cardapioData,
+        id: `card-${Date.now()}`,
+        criadoEm: new Date().toISOString().split('T')[0],
+      };
+      setCardapios(prev => [newCardapio, ...prev]);
+    }
+    addAuditoriaLog('Criação de Cardápio', 'Cardápios PNAE', `Novo cardápio criado: ${cardapioData.titulo} (${cardapioData.etapaEnsino})`);
   };
 
-  const updateCardapioStatus = (id: string, status: Cardapio['status']) => {
+  const updateCardapioStatus = async (id: string, status: Cardapio['status']) => {
     setCardapios(prev =>
       prev.map(c => (c.id === id ? { ...c, status } : c))
     );
+    await atualizarStatusCardapio(id, status);
     addAuditoriaLog('Atualização de Status de Cardápio', 'Cardápios PNAE', `Cardápio ${id} alterado para ${status}`);
   };
 
-  const addAlimento = (alimentoData: Omit<Alimento, 'id'>) => {
-    const newAlimento: Alimento = {
-      ...alimentoData,
-      id: `alim-${Date.now()}`,
-    };
-    setAlimentos(prev => [...prev, newAlimento]);
-    addAuditoriaLog('Cadastro de Alimento', 'Catálogo de Alimentos', `Novo alimento inserido: ${newAlimento.nome}`);
+  const addAlimento = async (alimentoData: Omit<Alimento, 'id'>) => {
+    try {
+      const criado = await salvarAlimento(alimentoData);
+      if (criado) {
+        setAlimentos(prev => [...prev, criado]);
+      }
+    } catch (e) {
+      console.error('Erro ao salvar alimento no Supabase:', e);
+      const newAlimento: Alimento = {
+        ...alimentoData,
+        id: `alim-${Date.now()}`,
+      };
+      setAlimentos(prev => [...prev, newAlimento]);
+    }
+    addAuditoriaLog('Cadastro de Alimento', 'Catálogo de Alimentos', `Novo alimento inserido: ${alimentoData.nome}`);
   };
 
-  const createChamadaPublica = (chamadaData: Omit<ChamadaPublica, 'id' | 'propostas'>) => {
-    const newChamada: ChamadaPublica = {
-      ...chamadaData,
-      id: `cp-${Date.now()}`,
-      propostas: [],
-    };
-    setChamadasPublicas(prev => [newChamada, ...prev]);
-    addAuditoriaLog('Abertura de Chamada Pública', 'Agricultura Familiar', `Edital ${newChamada.numeroEdital} publicado com valor de R$ ${newChamada.valorTotalEstimado.toFixed(2)}`);
+  const createChamadaPublica = async (chamadaData: Omit<ChamadaPublica, 'id' | 'propostas'>) => {
+    try {
+      const criada = await criarChamadaPublica(chamadaData, municipio.id);
+      if (criada) {
+        setChamadasPublicas(prev => [criada, ...prev]);
+      }
+    } catch (e) {
+      console.error('Erro ao criar chamada pública no Supabase:', e);
+      const newChamada: ChamadaPublica = {
+        ...chamadaData,
+        id: `cp-${Date.now()}`,
+        propostas: [],
+      };
+      setChamadasPublicas(prev => [newChamada, ...prev]);
+    }
+    addAuditoriaLog('Abertura de Chamada Pública', 'Agricultura Familiar', `Edital ${chamadaData.numeroEdital} publicado com valor de R$ ${chamadaData.valorTotalEstimado.toFixed(2)}`);
 
     addAlerta({
       tipo: 'info',
       categoria: 'chamada_publica',
       prioridade: 'media',
-      titulo: `📢 Nova Chamada Pública Publicada: ${newChamada.numeroEdital}`,
-      mensagem: `Edital aberto para aquisição de ${newChamada.objeto} com percentual de ${newChamada.percentualAgriFamiliar}% reservado à Agricultura Familiar.`,
+      titulo: `📢 Nova Chamada Pública Publicada: ${chamadaData.numeroEdital}`,
+      mensagem: `Edital aberto para aquisição de ${chamadaData.objeto} com percentual de ${chamadaData.percentualAgriFamiliar}% reservado à Agricultura Familiar.`,
       linkModulo: 'chamadas-publicas',
       showToast: true,
     });
@@ -728,6 +431,8 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
+
+    submeterProposta(propostaData).catch(err => console.error('Erro ao submeter proposta no Supabase:', err));
 
     const newProposta: PropostaFornecedor = {
       ...propostaData,
@@ -770,37 +475,45 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const emitirAF = (afData: Omit<AutorizacaoFornecimento, 'id' | 'numeroAF' | 'dataEmissao' | 'status'>) => {
-    const numSeq = autorizacoesFornecimento.length + 43;
-    const newAF: AutorizacaoFornecimento = {
-      ...afData,
-      id: `af-${Date.now()}`,
-      numeroAF: `AF-2026-00${numSeq}`,
-      dataEmissao: new Date().toISOString().split('T')[0],
-      status: 'Em Trânsito',
-    };
-    setAutorizacoesFornecimento(prev => [newAF, ...prev]);
-    addAuditoriaLog('Emissão de AF', 'Autorizações de Fornecimento', `AF ${newAF.numeroAF} emitida para ${newAF.escolaNome} no valor de R$ ${newAF.valorTotalAF.toFixed(2)}`);
+  const emitirAF = async (afData: Omit<AutorizacaoFornecimento, 'id' | 'numeroAF' | 'dataEmissao' | 'status'>) => {
+    try {
+      const emitida = await emitirAFService(afData);
+      if (emitida) {
+        setAutorizacoesFornecimento(prev => [emitida, ...prev]);
+      }
+    } catch (e) {
+      console.error('Erro ao emitir AF no Supabase:', e);
+      const numSeq = autorizacoesFornecimento.length + 43;
+      const newAF: AutorizacaoFornecimento = {
+        ...afData,
+        id: `af-${Date.now()}`,
+        numeroAF: `AF-2026-00${numSeq}`,
+        dataEmissao: new Date().toISOString().split('T')[0],
+        status: 'Em Trânsito',
+      };
+      setAutorizacoesFornecimento(prev => [newAF, ...prev]);
+    }
+
+    addAuditoriaLog('Emissão de AF', 'Autorizações de Fornecimento', `AF emitida para ${afData.escolaNome} no valor de R$ ${afData.valorTotalAF.toFixed(2)}`);
 
     // Notificação em tempo real imediata para a escola destino
     addAlerta({
       tipo: 'alerta',
       categoria: 'entrega_af',
       prioridade: 'alta',
-      titulo: `📦 Nova Autorização de Fornecimento Emitida: ${newAF.numeroAF}`,
-      mensagem: `A AF ${newAF.numeroAF} foi despachada para entrega na ${newAF.escolaNome} pelo agricultor ${newAF.fornecedorNome}. Prazo limite: ${newAF.dataLimiteEntrega}.`,
-      afId: newAF.id,
-      numeroAF: newAF.numeroAF,
-      escolaId: newAF.escolaId,
-      escolaNome: newAF.escolaNome,
-      fornecedorNome: newAF.fornecedorNome,
-      dataLimite: newAF.dataLimiteEntrega,
+      titulo: `📦 Nova Autorização de Fornecimento Emitida`,
+      mensagem: `Uma nova AF foi despachada para entrega na ${afData.escolaNome} pelo agricultor ${afData.fornecedorNome}. Prazo limite: ${afData.dataLimiteEntrega}.`,
+      escolaId: afData.escolaId,
+      escolaNome: afData.escolaNome,
+      fornecedorNome: afData.fornecedorNome,
+      dataLimite: afData.dataLimiteEntrega,
       acaoTexto: 'Conferir Recebimento',
       acaoTab: 'dashboard',
       linkModulo: 'entregas',
       showToast: true,
     });
   };
+
 
   const registrarRecebimentoEntrega = (
     entregaData: Omit<EntregaMercadoria, 'id' | 'termoRecebimentoGerado'>
@@ -917,16 +630,18 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })),
     };
 
+    confirmarEntregaService(input).catch(err => console.error('Erro ao confirmar entrega no Supabase:', err));
     registrarRecebimentoEntrega(novaEntrega);
     return novaEntrega;
   };
 
   const darBaixaEstoque = (estoqueId: string, quantidadeUtilizada: number) => {
+    darBaixaEstoqueService(estoqueId, quantidadeUtilizada).catch(err => console.error('Erro ao dar baixa no estoque no Supabase:', err));
     setEstoqueEscola(prev =>
       prev.map(item => {
         if (item.id === estoqueId) {
           const novaQtd = Math.max(0, item.quantidadeAtual - quantidadeUtilizada);
-          
+
           if (novaQtd <= item.quantidadeMinimaAlerta && novaQtd > 0) {
             addAlerta({
               tipo: 'alerta',
@@ -956,6 +671,8 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const consumirEstoque = (escolaId: string, alimentoId: string, quantidade: number, motivo?: string) => {
+    consumirEstoquePorAlimentoService(escolaId, alimentoId, quantidade)
+      .catch(err => console.error('Erro ao registrar consumo de estoque no Supabase:', err));
     setEstoqueEscola(prev =>
       prev.map(item => {
         if (item.escolaId === escolaId && item.alimentoId === alimentoId) {
@@ -972,13 +689,23 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditoriaLog('Consumo de Despensa Escolar', 'Despensa Escolar', `Registrada saída de ${quantidade} do item ${alimentoId} na escola ${escolaId}. Motivo: ${motivo || 'Preparo de Refeição'}`);
   };
 
-  const emitirParecerCAE = (parecerData: Omit<ParecerCAE, 'id' | 'assinadoEm'>) => {
-    const newParecer: ParecerCAE = {
-      ...parecerData,
-      id: `par-${Date.now()}`,
-      assinadoEm: new Date().toISOString(),
-    };
-    setPareceresCae(prev => [newParecer, ...prev]);
+  const emitirParecerCAE = async (parecerData: Omit<ParecerCAE, 'id' | 'assinadoEm'>) => {
+    let parecerId = `par-${Date.now()}`;
+    try {
+      const emitido = await emitirParecerCAEService(parecerData);
+      if (emitido) {
+        parecerId = emitido.id;
+        setPareceresCae(prev => [emitido, ...prev]);
+      }
+    } catch (e) {
+      console.error('Erro ao emitir parecer CAE no Supabase:', e);
+      const newParecer: ParecerCAE = {
+        ...parecerData,
+        id: parecerId,
+        assinadoEm: new Date().toISOString(),
+      };
+      setPareceresCae(prev => [newParecer, ...prev]);
+    }
 
     setPrestacaoContas(prev => ({
       ...prev,
@@ -987,8 +714,9 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : parecerData.resultadoParecer === 'Favorável com Ressalvas'
         ? 'Aprovado com Ressalvas'
         : 'Rejeitado',
-      parecerCaeId: newParecer.id,
+      parecerCaeId: parecerId,
     }));
+
 
     addAuditoriaLog(
       'Emissão de Parecer Conclusivo do CAE',
@@ -1011,11 +739,18 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch { /* ignore */ }
   };
 
-  const updateMunicipio = (updatedData: Partial<Municipio>) => {
-    setMunicipio(prev => {
-      const updated = { ...prev, ...updatedData };
-      return updated;
-    });
+  const updateMunicipio = async (updatedData: Partial<Municipio>) => {
+    try {
+      const salvo = await salvarMunicipio({ ...municipio, ...updatedData });
+      if (salvo) {
+        setMunicipio(salvo);
+      } else {
+        setMunicipio(prev => ({ ...prev, ...updatedData }));
+      }
+    } catch (e) {
+      console.error('Erro ao salvar município no Supabase:', e);
+      setMunicipio(prev => ({ ...prev, ...updatedData }));
+    }
 
     addAuditoriaLog(
       'Atualização de Dados Institucionais',
@@ -1033,7 +768,34 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const registrarVisitaCae = (visitaData: Omit<VisitaCAE, 'id'>) => {
+  const registrarVisitaCae = async (visitaData: Omit<VisitaCAE, 'id'>) => {
+    try {
+      const criada = await registrarVisitaCAEService(visitaData, municipio.id || currentUser?.municipioId);
+      if (criada) {
+        setVisitasCae(prev => [criada, ...prev]);
+        addAuditoriaLog(
+          'Registro de Fiscalização In Loco do CAE',
+          'Controle Social CAE',
+          `Fiscalização realizada em ${visitaData.escolaNome} na data ${visitaData.dataVisita}. Aceitabilidade: ${visitaData.aceitabilidadeAlunos}`
+        );
+        addAlerta({
+          tipo: 'info',
+          categoria: 'sistema',
+          prioridade: 'media',
+          titulo: `🔍 Nova Fiscalização CAE: ${visitaData.escolaNome}`,
+          mensagem: `Relatório de vistoria sanitária e nutricional registrado com parecer de aceitabilidade '${visitaData.aceitabilidadeAlunos}'.`,
+          linkModulo: 'cae',
+          showToast: true,
+        });
+        try {
+          confetti({ particleCount: 50, spread: 60 });
+        } catch { /* ignore */ }
+        return;
+      }
+    } catch (e) {
+      console.error('Erro ao registrar visita CAE no Supabase:', e);
+    }
+
     const novaVisita: VisitaCAE = {
       ...visitaData,
       id: `vis-${Date.now()}`,
@@ -1061,12 +823,20 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch { /* ignore */ }
   };
 
-  const addMembroCae = (membroData: Omit<MembroCAE, 'id'>) => {
-    const novoMembro: MembroCAE = {
-      ...membroData,
-      id: `mem-${Date.now()}`,
-    };
-    setMembrosCae(prev => [...prev, novoMembro]);
+  const addMembroCae = async (membroData: Omit<MembroCAE, 'id'>) => {
+    try {
+      const salvo = await salvarMembroCAEService(membroData, municipio.id || currentUser?.municipioId);
+      if (salvo) {
+        setMembrosCae(prev => [...prev, salvo]);
+      }
+    } catch (e) {
+      console.error('Erro ao salvar membro CAE no Supabase:', e);
+      const novoMembro: MembroCAE = {
+        ...membroData,
+        id: `mem-${Date.now()}`,
+      };
+      setMembrosCae(prev => [...prev, novoMembro]);
+    }
 
     addAuditoriaLog(
       'Inclusão de Conselheiro CAE',
@@ -1075,8 +845,9 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const updateMembroCae = (id: string, updatedData: Partial<MembroCAE>) => {
+  const updateMembroCae = async (id: string, updatedData: Partial<MembroCAE>) => {
     setMembrosCae(prev => prev.map(m => m.id === id ? { ...m, ...updatedData } : m));
+    await atualizarMembroCAEService(id, updatedData);
 
     addAuditoriaLog(
       'Atualização de Membro CAE',
@@ -1085,7 +856,31 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const agendarReuniaoCae = (reuniaoData: Omit<ReuniaoCAE, 'id'>) => {
+  const agendarReuniaoCae = async (reuniaoData: Omit<ReuniaoCAE, 'id'>) => {
+    try {
+      const criada = await agendarReuniaoCAEService(reuniaoData, municipio.id || currentUser?.municipioId);
+      if (criada) {
+        setReunioesCae(prev => [criada, ...prev]);
+        addAuditoriaLog(
+          'Agendamento de Reunião CAE',
+          'Controle Social CAE',
+          `Reunião ${reuniaoData.tipo} agendada para ${reuniaoData.dataHora}: ${reuniaoData.pauta}`
+        );
+        addAlerta({
+          tipo: 'info',
+          categoria: 'sistema',
+          prioridade: 'baixa',
+          titulo: `📅 Reunião CAE Agendada: ${reuniaoData.numeroAta}`,
+          mensagem: `Pauta convocatória registrada para ${reuniaoData.dataHora} no local: ${reuniaoData.local}.`,
+          linkModulo: 'cae',
+          showToast: true,
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('Erro ao agendar reunião CAE no Supabase:', e);
+    }
+
     const novaReuniao: ReuniaoCAE = {
       ...reuniaoData,
       id: `reun-${Date.now()}`,
@@ -1109,13 +904,24 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const registrarApontamentoOuvidoria = (apontamentoData: Omit<ApontamentoOuvidoriaCAE, 'id' | 'dataRegistro'>) => {
-    const novoApontamento: ApontamentoOuvidoriaCAE = {
-      ...apontamentoData,
-      id: `ouv-${Date.now()}`,
-      dataRegistro: new Date().toISOString().split('T')[0],
-    };
-    setApontamentosCae(prev => [novoApontamento, ...prev]);
+  const registrarApontamentoOuvidoria = async (apontamentoData: Omit<ApontamentoOuvidoriaCAE, 'id' | 'dataRegistro'>) => {
+    try {
+      const salvo = await registrarApontamentoCAEService(
+        { ...apontamentoData, dataRegistro: new Date().toISOString().split('T')[0] },
+        municipio.id || currentUser?.municipioId
+      );
+      if (salvo) {
+        setApontamentosCae(prev => [salvo, ...prev]);
+      }
+    } catch (e) {
+      console.error('Erro ao registrar apontamento CAE no Supabase:', e);
+      const novoApontamento: ApontamentoOuvidoriaCAE = {
+        ...apontamentoData,
+        id: `ouv-${Date.now()}`,
+        dataRegistro: new Date().toISOString().split('T')[0],
+      };
+      setApontamentosCae(prev => [novoApontamento, ...prev]);
+    }
 
     addAuditoriaLog(
       'Registro de Manifestação na Ouvidoria CAE',
@@ -1134,8 +940,9 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const responderApontamentoOuvidoria = (id: string, resposta: string, status: ApontamentoOuvidoriaCAE['status']) => {
+  const responderApontamentoOuvidoria = async (id: string, resposta: string, status: ApontamentoOuvidoriaCAE['status']) => {
     setApontamentosCae(prev => prev.map(a => a.id === id ? { ...a, respostaCae: resposta, status } : a));
+    await responderApontamentoCAEService(id, resposta, status);
 
     addAuditoriaLog(
       'Resposta de Ouvidoria CAE',
@@ -1144,37 +951,29 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const resetToMockData = () => {
-    localStorage.clear();
-    setMunicipio(mockMunicipio);
-    setEscolas(mockEscolas);
-    setAlimentos(mockAlimentos);
-    setCardapios(mockCardapios);
-    setChamadasPublicas(mockChamadasPublicas);
-    setContratos(mockContratos);
-    setAutorizacoesFornecimento(mockAutorizacoesFornecimento);
-    setEntregas(mockEntregas);
-    setEstoqueEscola(mockEstoqueEscola);
-    setPrestacaoContas(mockPrestacaoContas);
-    setPareceresCae([mockParecerCAE]);
-    setVisitasCae(mockVisitasCAE);
-    setMembrosCae(mockMembrosCAE);
-    setReunioesCae(mockReunioesCAE);
-    setApontamentosCae(mockApontamentosCAE);
-    setAuditoriaLogs(mockAuditoriaLogs);
-    setAlertas(mockAlertas);
-    setToasts([]);
-    setCurrentUser(mockUsers[0]);
-    setActiveTab('dashboard');
-  };
-
   return (
     <PNAEContext.Provider
       value={{
+        // --- Auth (delegado) ---
         currentUser,
-        currentRole: currentUser?.role || 'ADMIN',
+        currentRole: currentUser?.role ?? 'ADMIN',
         isAuthenticated: !!currentUser,
         authChecking,
+        login,
+        logout,
+        // --- UI (delegado) ---
+        alertas: ui.alertas,
+        toasts: ui.toasts,
+        somHabilitado: ui.somHabilitado,
+        activeTab: ui.activeTab,
+        setActiveTab: ui.setActiveTab,
+        addAlerta: ui.addAlerta,
+        markAlertaLido: ui.markAlertaLido,
+        markAllAlertasLidos: ui.markAllAlertasLidos,
+        removerAlerta: ui.removerAlerta,
+        dismissToast: ui.dismissToast,
+        toggleSomNotificacao: ui.toggleSomNotificacao,
+        // --- Dados de negócio ---
         municipio,
         escolas,
         alimentos,
@@ -1184,7 +983,7 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         autorizacoesFornecimento,
         entregas,
         estoqueEscola,
-        estoqueEscolas: estoqueEscola, // Alias para compatibilidade
+        estoqueEscolas: estoqueEscola,
         prestacaoContas,
         pareceresCae,
         visitasCae,
@@ -1192,14 +991,7 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reunioesCae,
         apontamentosCae,
         auditoriaLogs,
-        alertas,
-        toasts,
-        somHabilitado,
-        activeTab,
-        setActiveTab,
-        login,
-        logout,
-        switchRole,
+        addEscola,
         addCardapio,
         updateCardapioStatus,
         addAlimento,
@@ -1218,15 +1010,7 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registrarApontamentoOuvidoria,
         responderApontamentoOuvidoria,
         addAuditoriaLog,
-        addAlerta,
-        markAlertaLido,
-        markAllAlertasLidos,
-        removerAlerta,
-        dismissToast,
-        toggleSomNotificacao,
-        triggerSimulacaoNotificacao,
         updateMunicipio,
-        resetToMockData,
       }}
     >
       {children}
@@ -1234,7 +1018,23 @@ export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const usePNAE = () => {
+// ---------------------------------------------------------------------------
+// PNAEProvider público — compõe Auth + UI + Business
+// ---------------------------------------------------------------------------
+export const PNAEProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <AuthProvider>
+    <UIProvider>
+      <PNAEBusinessProvider>
+        {children}
+      </PNAEBusinessProvider>
+    </UIProvider>
+  </AuthProvider>
+);
+
+// ---------------------------------------------------------------------------
+// Hook público agregador — retrocompatível com todos os consumers
+// ---------------------------------------------------------------------------
+export const usePNAE = (): PNAEContextType => {
   const context = useContext(PNAEContext);
   if (!context) {
     throw new Error('usePNAE must be used within a PNAEProvider');

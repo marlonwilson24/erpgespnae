@@ -4,7 +4,7 @@ import { Escola, EtapaEnsino } from '../../types';
 import { School, Plus, MapPin, Users, Phone, Mail, CheckCircle2 } from 'lucide-react';
 
 export const EscolasManager: React.FC = () => {
-  const { escolas, municipio } = usePNAE();
+  const { escolas, addEscola } = usePNAE();
   const [showAddModal, setShowAddModal] = useState(false);
   const [nome, setNome] = useState('');
   const [codigoInep, setCodigoInep] = useState('');
@@ -97,6 +97,19 @@ export const EscolasManager: React.FC = () => {
             <form
               onSubmit={e => {
                 e.preventDefault();
+                addEscola({
+                  nome,
+                  codigoInep,
+                  municipioId: '',
+                  endereco,
+                  diretorNome,
+                  responsavelMerendaNome,
+                  telefone: '',
+                  email: '',
+                  totalAlunos,
+                  distribuicaoAlunos: [],
+                  tipoAtendimento,
+                });
                 setShowAddModal(false);
               }}
               className="mt-4 space-y-3"

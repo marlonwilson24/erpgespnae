@@ -108,7 +108,7 @@ export const GestaoUsuariosSection: React.FC = () => {
       addAuditoriaLog(
         'Cadastro de Usuário com Perfil',
         'Usuários e Perfis de Acesso',
-        `Usuário ${nome.trim()} (${email.trim()}) cadastrado com perfil ${perfilSelecionado}${resultado.origem === 'local' ? ' em modo demonstração' : ' via Supabase Auth'}`
+        `Usuário ${nome.trim()} (${email.trim()}) cadastrado com perfil ${perfilSelecionado} via Supabase Auth`
       );
       limparFormulario();
       await carregarLista();
@@ -314,9 +314,7 @@ export const GestaoUsuariosSection: React.FC = () => {
             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                {sucesso.origem === 'supabase'
-                  ? 'Usuário cadastrado no Supabase Auth com o perfil selecionado! Já é possível acessar o sistema.'
-                  : 'Usuário registrado em modo demonstração (armazenamento local). Para cadastro real, configure SUPABASE_SERVICE_ROLE_KEY na Vercel.'}
+                Usuário cadastrado no Supabase Auth com o perfil selecionado! Já é possível acessar o sistema.
               </span>
             </div>
           )}
@@ -391,12 +389,8 @@ export const GestaoUsuariosSection: React.FC = () => {
                         </td>
                         <td className="px-2 py-2.5 text-[11px] text-stone-600 font-mono whitespace-nowrap">{u.cpf}</td>
                         <td className="px-2 py-2.5">
-                          <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
-                            u.origem === 'supabase'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-stone-100 text-stone-600 border-stone-200'
-                          }`}>
-                            {u.origem === 'supabase' ? 'Supabase Auth' : 'Demonstração'}
+                          <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-700 border-emerald-200">
+                            Supabase Auth
                           </span>
                         </td>
                       </tr>

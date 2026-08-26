@@ -1,7 +1,5 @@
 import { chamarApiJson } from './apiClient';
 
-const LS_KEY = 'pnae_erp_v2_municipioSync';
-
 export interface DadosMunicipioInput {
   nome: string;
   uf: string;
@@ -50,16 +48,8 @@ export async function sincronizarMunicipio(
       return { sucesso: false, destino: 'supabase', erro: resposta.error };
     }
     return { sucesso: false, destino: 'supabase', erro: 'Erro desconhecido ao sincronizar.' };
-  } catch {
-    // Sem sessão Supabase ou endpoint indisponível: modo demonstração local
-    try {
-      localStorage.setItem(
-        LS_KEY,
-        JSON.stringify({ ...dados, sincronizadoEm: new Date().toISOString() })
-      );
-    } catch {
-      /* ignore */
-    }
-    return { sucesso: true, destino: 'local' };
+  } catch (err: any) {
+    return { sucesso: false, destino: 'supabase', erro: err?.message || 'Falha ao conectar ao servidor para sincronização.' };
   }
+
 }

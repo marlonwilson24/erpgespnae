@@ -10,7 +10,7 @@ interface SubmeterPropostaModalProps {
 }
 
 export const SubmeterPropostaModal: React.FC<SubmeterPropostaModalProps> = ({ chamada, onClose }) => {
-  const { currentUser, contratos, submeterProposta } = usePNAE();
+  const { currentUser, contratos, submitProposta } = usePNAE();
 
   // Calcular o acumulado atual da DAP do fornecedor no ano
   const LIMITE_LEGAL_DAP = 40000;
@@ -43,24 +43,26 @@ export const SubmeterPropostaModal: React.FC<SubmeterPropostaModalProps> = ({ ch
       return;
     }
 
-    submeterProposta(chamada.id, {
+    const tipoEnquadramento: 'Individual' | 'Grupo Informal' | 'Cooperativa / Associação' =
+      tipoProdutor === 'Grupo Formal (Cooperativa)' ? 'Cooperativa / Associação' : tipoProdutor;
+
+    submitProposta({
+      chamadaPublicaId: chamada.id,
       fornecedorId: currentUser?.id || 'user-fornecedor',
       fornecedorNome: currentUser?.name || 'Associação de Produtores Familiares',
       fornecedorCpfCnpj: currentUser?.cpf || '91.823.456/0001-02',
       fornecedorDapCaf: dapNumero,
-      tipoProdutor,
+      tipoProdutor: tipoEnquadramento,
       valorTotalProposta,
       acumuladoAnoDapCaf: totalContratadoAno,
       limiteDisponivelDap: saldoDisponivelDap,
-      itens: itensProposta.map(it => ({
-        id: `prop-item-${Date.now()}-${it.alimentoId}`,
-        chamadaItemId: it.chamadaItemId,
-        alimentoId: it.alimentoId,
+      status: 'Em Análise',
+      itensOfertados: itensProposta.map(it => ({
+        itemChamadaId: it.chamadaItemId,
         quantidadeOfertada: it.quantidadeOfertada,
         precoUnitarioOfertado: it.precoUnitario,
-        valorTotalItem: it.quantidadeOfertada * it.precoUnitario,
+        valorTotal: it.quantidadeOfertada * it.precoUnitario,
       })),
-      arquivoProjetoVendaNome: 'Projeto_de_Venda_Assinado.pdf',
     });
 
     onClose();
