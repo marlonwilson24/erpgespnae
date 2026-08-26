@@ -28,18 +28,31 @@ export async function exigirAdmin(
     return { status: 401, error: 'Autenticação necessária.' };
   }
 
-  const { data, error } = await service.auth.getUser(token);
-  if (error || !data?.user) {
+  let data;
+  try {
+    const resposta = await service.auth.getUser(token);
+    data = resposta.data;
+    if (resposta.error || !resposta.data?.user) {
+      return { status: 401, error: 'Sessão inválida ou expirada.' };
+    }
+  } catch {
     return { status: 401, error: 'Sessão inválida ou expirada.' };
   }
 
-  const { data: perfil, error: perfilError } = await service
-    .from('perfis_usuarios')
-    .select('role')
-    .eq('id', data.user.id)
-    .maybeSingle();
+  let perfil;
+  try {
+    const { data: perfilRow, error: perfilError } = await service
+      .from('perfis_usuarios')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle();
+    if (perfilError || !perfilRow) return { status: 403, error: 'Perfil não encontrado.' };
+    perfil = perfilRow;
+  } catch {
+    return { status: 403, error: 'Perfil não encontrado.' };
+  }
 
-  if (perfilError || !perfil || perfil.role !== 'ADMIN') {
+  if (perfil.role !== 'ADMIN') {
     return { status: 403, error: 'Apenas Gestores Municipais (ADMIN) podem realizar esta operação.' };
   }
 
