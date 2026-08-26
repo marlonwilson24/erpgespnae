@@ -1,4 +1,4 @@
-pimport React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
 import { RoleBadge } from '../layout/RoleBadge';
 import {
