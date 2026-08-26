@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+pimport React, { useEffect, useState } from 'react';
 import { usePNAE } from '../../context/PNAEContext';
 import { RoleBadge } from '../layout/RoleBadge';
 import {
@@ -154,15 +154,13 @@ export const GestaoUsuariosSection: React.FC = () => {
                   key={perfil.value}
                   type="button"
                   onClick={() => setPerfilSelecionado(perfil.value)}
-                  className={`p-2.5 rounded-xl border text-left transition ${
-                    perfilSelecionado === perfil.value
+                  className={`p-2.5 rounded-xl border text-left transition ${perfilSelecionado === perfil.value
                       ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500'
                       : 'bg-white border-stone-200 hover:border-emerald-300'
-                  }`}
+                    }`}
                 >
-                  <span className={`block text-[11px] font-bold ${
-                    perfilSelecionado === perfil.value ? 'text-emerald-900' : 'text-stone-800'
-                  }`}>
+                  <span className={`block text-[11px] font-bold ${perfilSelecionado === perfil.value ? 'text-emerald-900' : 'text-stone-800'
+                    }`}>
                     {perfil.label}
                   </span>
                   <span className="block text-[10px] text-stone-500 leading-snug mt-0.5">
