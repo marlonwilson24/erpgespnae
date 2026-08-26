@@ -211,8 +211,13 @@ const PNAEBusinessProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [apontamentosCae, setApontamentosCae] = useState<ApontamentoOuvidoriaCAE[]>([]);
   const [auditoriaLogs, setAuditoriaLogs] = useState<AuditoriaLog[]>([]);
 
-  // Carregamento primário e direto do Supabase para todos os módulos de negócio
+  // Carregamento primário e direto do Supabase para todos os módulos de negócio.
+  // Depende de currentUser?.id: na montagem a sessão do Supabase ainda não foi
+  // restaurada, então as queries rodariam como anônimo e o RLS retornaria nada
+  // (municipio/escolas vazios). Assim que a sessão é restaurada (login), o
+  // efeito roda novamente e carrega os dados reais.
   useEffect(() => {
+    if (!currentUser) return;
     let isMounted = true;
 
     async function carregarDadosSupabase() {
@@ -281,7 +286,7 @@ const PNAEBusinessProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser?.id]);
 
 
   const addAuditoriaLog = useCallback((acao: string, modulo: string, detalhes: string) => {
@@ -339,12 +344,39 @@ const PNAEBusinessProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addEscola = async (escolaData: Omit<Escola, 'id'>) => {
     try {
-      const salva = await salvarEscola({ ...escolaData, municipioId: municipio.id });
+      let municipioId = municipio.id;
+      if (!municipioId) {
+        const mun = await buscarMunicipio();
+        municipioId = mun?.id || '';
+      }
+
+      if (!municipioId) {
+        throw new Error('Nenhum município configurado no banco. Cadastre o município (Órgão Gestor) antes de registrar escolas.');
+      }
+
+      const salva = await salvarEscola({ ...escolaData, municipioId });
       if (salva) {
         setEscolas(prev => [...prev, salva]);
+        addAlerta({
+          tipo: 'sucesso',
+          categoria: 'sistema',
+          prioridade: 'baixa',
+          titulo: 'Escola cadastrada',
+          mensagem: `${salva.nome} (INEP ${salva.codigoInep}) foi salva no banco Supabase.`,
+          showToast: true,
+        });
       }
     } catch (e) {
+      const mensagem = e instanceof Error ? e.message : 'Falha ao salvar escola no banco.';
       console.error('Erro ao salvar escola no Supabase:', e);
+      addAlerta({
+        tipo: 'perigo',
+        categoria: 'sistema',
+        prioridade: 'alta',
+        titulo: 'Erro ao cadastrar escola',
+        mensagem,
+        showToast: true,
+      });
     }
     addAuditoriaLog('Cadastro de Escola', 'Unidades Escolares', `Nova escola cadastrada: ${escolaData.nome} (INEP ${escolaData.codigoInep})`);
   };
