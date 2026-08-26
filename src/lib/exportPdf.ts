@@ -150,9 +150,13 @@ function addOfficialFooters(doc: jsPDF, docCode: string, isLandscape = false) {
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120, 120, 120);
-    doc.text(`Documento Oficial emitido pelo Sistema de Gestão PNAE em ${now} • Código: ${docCode}`, 14, height - 7);
-    doc.text(`Página ${i} de ${pageCount}`, width - 14, height - 7, { align: 'right' });
-    doc.text('Conformidade com a Lei Federal nº 11.947/2009 e Resolução CD/FNDE nº 06/2020', centerX, height - 7, { align: 'center' });
+
+    // Linha 1: documento oficial (centro) + numeração de página (direita)
+    doc.text(`Documento Oficial emitido pelo Sistema de Gestão PNAE em ${now} • Código: ${docCode}`, centerX, height - 8, { align: 'center' });
+    doc.text(`Página ${i} de ${pageCount}`, width - 14, height - 8, { align: 'right' });
+
+    // Linha 2: fundamentação legal (centralizada)
+    doc.text('Conformidade com a Lei Federal nº 11.947/2009 e Resolução CD/FNDE nº 06/2020', centerX, height - 4);
   }
 }
 

@@ -14,6 +14,19 @@ export interface NovoUsuarioInput {
   escolaId?: string;
 }
 
+export interface AtualizarUsuarioInput {
+  id: string;
+  nome?: string;
+  email?: string;
+  senha?: string;
+  role?: UserRole;
+  cpf?: string;
+  telefone?: string;
+  cargo?: string;
+  escolaId?: string;
+  ativo?: boolean;
+}
+
 export interface UsuarioListagem {
   id: string;
   name: string;
@@ -85,4 +98,54 @@ export async function listarUsuarios(): Promise<UsuarioListagem[]> {
   }
 
   return supabaseUsuarios;
+}
+
+export async function atualizarUsuario(
+  input: AtualizarUsuarioInput
+): Promise<{ success: boolean; error?: string; origem: 'supabase' | 'local' }> {
+  if (!input.id) {
+    return { success: false, error: 'Informe o usuário a ser atualizado.', origem: 'local' };
+  }
+
+  if (input.role && !ROLES_PERMITIDOS.includes(input.role)) {
+    return { success: false, error: 'Perfil inválido.', origem: 'local' };
+  }
+
+  if (input.senha !== undefined && input.senha !== '' && input.senha.length < 6) {
+    return { success: false, error: 'A nova senha deve ter no mínimo 6 caracteres.', origem: 'local' };
+  }
+
+  try {
+    const resposta = await chamarApiJson<{ usuario: UsuarioListagem }>('PUT', '/api/admin-usuarios', input);
+    if (resposta.ok) {
+      return { success: true, origem: 'supabase' };
+    }
+    if ('error' in resposta) {
+      return { success: false, error: resposta.error, origem: 'supabase' };
+    }
+    return { success: false, error: 'Erro desconhecido ao atualizar.', origem: 'supabase' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha de conexão com o servidor Supabase.', origem: 'supabase' };
+  }
+}
+
+export async function excluirUsuario(
+  id: string
+): Promise<{ success: boolean; error?: string; origem: 'supabase' | 'local' }> {
+  if (!id) {
+    return { success: false, error: 'Informe o usuário a ser excluído.', origem: 'local' };
+  }
+
+  try {
+    const resposta = await chamarApiJson<{ sucesso: boolean }>('DELETE', '/api/admin-usuarios', { id });
+    if (resposta.ok) {
+      return { success: true, origem: 'supabase' };
+    }
+    if ('error' in resposta) {
+      return { success: false, error: resposta.error, origem: 'supabase' };
+    }
+    return { success: false, error: 'Erro desconhecido ao excluir.', origem: 'supabase' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha de conexão com o servidor Supabase.', origem: 'supabase' };
+  }
 }

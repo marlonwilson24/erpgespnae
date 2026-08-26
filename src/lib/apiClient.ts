@@ -19,7 +19,7 @@ async function obterTokenSessao(): Promise<string | null> {
  * (permindo fallback para modo demonstração no chamador).
  */
 export async function chamarApiJson<T>(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown
 ): Promise<ApiResultado<T>> {
